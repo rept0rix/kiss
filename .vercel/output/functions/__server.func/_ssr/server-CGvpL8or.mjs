@@ -2,7 +2,7 @@ import { r as createServerFn } from "./ssr.mjs";
 import { t as createServerRpc } from "./createServerRpc-CcvdN_gc.mjs";
 import { r as getSql } from "./db-htz3RCtV.mjs";
 import { n as isSkin, t as authMiddleware } from "./ranks-CuwA0vI9.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/server-3F61Vofp.js
+//#region node_modules/.nitro/vite/services/ssr/assets/server-CGvpL8or.js
 var KISS_KINDS = [
 	{
 		id: "warm",
@@ -251,7 +251,7 @@ var getHome = createServerFn({ method: "GET" }).middleware([authMiddleware]).han
       select user_id, handle, display_name, avatar_hue, last_seen::text as last_seen
       from profiles
       where user_id <> ${me}
-        and phone is not null
+        and coalesce(display_name, '') <> ''
         and not exists (
           select 1 from blocks b
           where (b.blocker_id = ${me} and b.blocked_id = profiles.user_id)
@@ -335,7 +335,7 @@ var searchPeople = createServerFn({ method: "POST" }).middleware([authMiddleware
           select user_id, handle, display_name, avatar_hue, last_seen::text as last_seen
           from profiles
           where user_id <> ${me}
-            and phone is not null
+            and coalesce(display_name, '') <> ''
             and (
               lower(handle) like ${like}
               or lower(display_name) like ${like}
@@ -352,7 +352,7 @@ var searchPeople = createServerFn({ method: "POST" }).middleware([authMiddleware
           select user_id, handle, display_name, avatar_hue, last_seen::text as last_seen
           from profiles
           where user_id <> ${me}
-            and phone is not null
+            and coalesce(display_name, '') <> ''
             and not exists (
               select 1 from blocks b
               where (b.blocker_id = ${me} and b.blocked_id = profiles.user_id)
@@ -361,6 +361,27 @@ var searchPeople = createServerFn({ method: "POST" }).middleware([authMiddleware
           order by last_seen desc nulls last, display_name
           limit 40
         `).map((r) => ({
+		userId: r.user_id,
+		handle: r.handle,
+		displayName: r.display_name,
+		avatarHue: Number(r.avatar_hue),
+		lastSeen: r.last_seen
+	}));
+});
+var browsePeople_createServerFn_handler = createServerRpc({
+	id: "f9896789eb12b16dc8fd72db0206a8ab69e71ba72c28c053a3c3f71e4ea3948e",
+	name: "browsePeople",
+	filename: "src/lib/kisses/server.ts"
+}, (opts) => browsePeople.__executeServer(opts));
+var browsePeople = createServerFn({ method: "GET" }).handler(browsePeople_createServerFn_handler, async () => {
+	return (await (await getSql())`
+      select user_id, handle, display_name, avatar_hue, last_seen::text as last_seen
+      from profiles
+      where coalesce(display_name, '') <> ''
+        and lower(display_name) <> 'you'
+      order by last_seen desc nulls last, display_name
+      limit 50
+    `).map((r) => ({
 		userId: r.user_id,
 		handle: r.handle,
 		displayName: r.display_name,
@@ -638,4 +659,4 @@ var blockPerson = createServerFn({ method: "POST" }).middleware([authMiddleware]
 	return { ok: true };
 });
 //#endregion
-export { acceptFriend_createServerFn_handler, blockPerson_createServerFn_handler, catchKiss_createServerFn_handler, declineFriend_createServerFn_handler, findByPhone_createServerFn_handler, getHome_createServerFn_handler, matchPhones_createServerFn_handler, requestFriend_createServerFn_handler, searchPeople_createServerFn_handler, sendKiss_createServerFn_handler, sendRandomKiss_createServerFn_handler, setDisplayName_createServerFn_handler, setPhone_createServerFn_handler, upsertProfile_createServerFn_handler };
+export { acceptFriend_createServerFn_handler, blockPerson_createServerFn_handler, browsePeople_createServerFn_handler, catchKiss_createServerFn_handler, declineFriend_createServerFn_handler, findByPhone_createServerFn_handler, getHome_createServerFn_handler, matchPhones_createServerFn_handler, requestFriend_createServerFn_handler, searchPeople_createServerFn_handler, sendKiss_createServerFn_handler, sendRandomKiss_createServerFn_handler, setDisplayName_createServerFn_handler, setPhone_createServerFn_handler, upsertProfile_createServerFn_handler };

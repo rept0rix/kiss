@@ -117,7 +117,7 @@ var HEADERS = { TSS_SHELL: "X-TSS_SHELL" };
 * the dev styles URL for route-scoped CSS collection.
 */
 async function getStartManifest(matchedRoutes) {
-	const { tsrStartManifest } = await import("../_tanstack-start-manifest_v-D8hTm58x.mjs");
+	const { tsrStartManifest } = await import("../_tanstack-start-manifest_v-DXA0C34R.mjs");
 	const startManifest = tsrStartManifest();
 	let routes = startManifest.routes;
 	routes[rootRouteId];
@@ -139,11 +139,11 @@ async function getStartManifest(matchedRoutes) {
 var manifest = {
 	"01af8e25b1e70190450b8d0ea818c43b549f610d60c587d9cc9cdcc2d6b0daf7": {
 		functionName: "declineFriend_createServerFn_handler",
-		importer: () => import("./server-3F61Vofp.mjs")
+		importer: () => import("./server-CGvpL8or.mjs")
 	},
 	"222b817d6834b3fddfbabaabc917c7295e5c197d750cdbb35b8c456d96002f26": {
 		functionName: "setDisplayName_createServerFn_handler",
-		importer: () => import("./server-3F61Vofp.mjs")
+		importer: () => import("./server-CGvpL8or.mjs")
 	},
 	"2c4985e96c199268f7f639534cb5e8e31d6b19d43286bf77416413db60ffde26": {
 		functionName: "fetchSessionUser_createServerFn_handler",
@@ -151,51 +151,55 @@ var manifest = {
 	},
 	"353b8fc3ff348f1228ef211bc840f602b5aa336ab03fdeb4045c3465e2d3f1f7": {
 		functionName: "acceptFriend_createServerFn_handler",
-		importer: () => import("./server-3F61Vofp.mjs")
+		importer: () => import("./server-CGvpL8or.mjs")
 	},
 	"5cf015d7a6e57cff719e072a2097d2134b4daa1027aead5828bd0c3b1b24446e": {
 		functionName: "matchPhones_createServerFn_handler",
-		importer: () => import("./server-3F61Vofp.mjs")
+		importer: () => import("./server-CGvpL8or.mjs")
 	},
 	"5de9c1aaeef2fd5a84d2402981967765b0946ad65ad9173bde349da26a6d8c99": {
 		functionName: "sendKiss_createServerFn_handler",
-		importer: () => import("./server-3F61Vofp.mjs")
+		importer: () => import("./server-CGvpL8or.mjs")
 	},
 	"8dbdceda2238388f8f6f6d1786c77c9d22dc9227b9569a573d88352d9b18fbf6": {
 		functionName: "blockPerson_createServerFn_handler",
-		importer: () => import("./server-3F61Vofp.mjs")
+		importer: () => import("./server-CGvpL8or.mjs")
 	},
 	"a7cfb66bfe22dc63b14f4fd08b1f0f36f6ae6a5470b9cc261fe57724b010a103": {
 		functionName: "upsertProfile_createServerFn_handler",
-		importer: () => import("./server-3F61Vofp.mjs")
+		importer: () => import("./server-CGvpL8or.mjs")
 	},
 	"c28266f17f8477d6fb68a78c179a7b606959ce3d0ab9e2665015e002bc25179b": {
 		functionName: "getHome_createServerFn_handler",
-		importer: () => import("./server-3F61Vofp.mjs")
+		importer: () => import("./server-CGvpL8or.mjs")
 	},
 	"c80f170e2393cc9b2ed559550945ff51d8273ac775a465b92d206151f44c40a1": {
 		functionName: "findByPhone_createServerFn_handler",
-		importer: () => import("./server-3F61Vofp.mjs")
+		importer: () => import("./server-CGvpL8or.mjs")
 	},
 	"daaefd1b96122bd9195cec25e6caba33ad7a04974331977c94e3c774993bfb65": {
 		functionName: "sendRandomKiss_createServerFn_handler",
-		importer: () => import("./server-3F61Vofp.mjs")
+		importer: () => import("./server-CGvpL8or.mjs")
 	},
 	"e57dafb45ccef2030048ceafbc8f394050ab875e54550b1a95b1502315eb0696": {
 		functionName: "setPhone_createServerFn_handler",
-		importer: () => import("./server-3F61Vofp.mjs")
+		importer: () => import("./server-CGvpL8or.mjs")
 	},
 	"f266e40787c19954abaef16bb4f1f66a93659ff8bfd4ed146372c984e16733a6": {
 		functionName: "searchPeople_createServerFn_handler",
-		importer: () => import("./server-3F61Vofp.mjs")
+		importer: () => import("./server-CGvpL8or.mjs")
 	},
 	"f847bc4f2e0841843c7d47dba394c9fc872ddf99ceda720bc2f5e04e0dfd7584": {
 		functionName: "catchKiss_createServerFn_handler",
-		importer: () => import("./server-3F61Vofp.mjs")
+		importer: () => import("./server-CGvpL8or.mjs")
 	},
 	"f8ff61ecf89a668eea414148e2c147939689e1a63fb5feb1d0a12a75163684b4": {
 		functionName: "requestFriend_createServerFn_handler",
-		importer: () => import("./server-3F61Vofp.mjs")
+		importer: () => import("./server-CGvpL8or.mjs")
+	},
+	"f9896789eb12b16dc8fd72db0206a8ab69e71ba72c28c053a3c3f71e4ea3948e": {
+		functionName: "browsePeople_createServerFn_handler",
+		importer: () => import("./server-CGvpL8or.mjs")
 	}
 };
 async function getServerFnById(id, access) {
@@ -1465,7 +1469,7 @@ var getBaseManifest = getProdBaseManifest;
 var createEarlyHintsForRequest = createEarlyHintsCollector;
 async function loadEntries() {
 	const [routerEntry, startEntry, pluginAdapters] = await Promise.all([
-		import("./router-Dx7h4I9R.mjs").then((n) => n.t),
+		import("./router-Bn0FQ7jt.mjs").then((n) => n.t),
 		import("./start-5Z2QO8AU.mjs"),
 		import("./empty-plugin-adapters-D9UWiqvJ.mjs")
 	]);

@@ -1,16 +1,19 @@
+import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import { isSkin, type SkinId } from "@/lib/kisses/ranks";
 
 export function KissSkin({
   skin,
   className,
+  style,
 }: {
   skin?: string | null;
   className?: string;
+  style?: CSSProperties;
 }) {
   const id: SkinId = skin && isSkin(skin) ? skin : "classic";
   return (
-    <svg viewBox="0 0 64 48" className={cn("kiss-skin", `skin-${id}`, className)} aria-hidden>
+    <svg viewBox="0 0 64 48" className={cn("kiss-skin", `skin-${id}`, className)} style={style} aria-hidden>
       {shape(id)}
     </svg>
   );

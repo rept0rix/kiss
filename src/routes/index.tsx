@@ -590,58 +590,127 @@ function Home() {
 }
 
 function mergeOrbit(local: OrbitItem[], data: HomePayload | undefined): OrbitItem[] {
+  const people = new Map<string, OrbitItem>();
+
+  function personKey(name: string, userId?: string) {
+    return (userId || name).trim().toLowerCase();
+  }
+
+  function bump(item: OrbitItem) {
+    const key = personKey(item.name, item.userId);
+    if (!key) return;
+    const cur = people.get(key);
+    if (!cur) {
+      people.set(key, {
+        ...item,
+        id: `p-${key}`,
+        toMe: item.toMe ?? (item.dir === "in" ? 1 : 0),
+        fromMe: item.fromMe ?? (item.dir === "out" ? 1 : 0),
+      });
+      return;
+    }
+    cur.toMe = (cur.toMe ?? 0) + (item.toMe ?? (item.dir === "in" ? 1 : 0));
+    cur.fromMe = (cur.fromMe ?? 0) + (item.fromMe ?? (item.dir === "out" ? 1 : 0));
+    if (item.photo) cur.photo = item.photo;
+    if (item.userId) cur.userId = item.userId;
+    if (item.tel) cur.tel = item.tel;
+    if (item.skin) cur.skin = item.skin;
+    if (item.dir === "in") cur.dir = "in";
+    if (item.status === "waiting") {
+      cur.status = "waiting";
+      if (item.serverId) cur.serverId = item.serverId;
+    }
+  }
+
   const photoOf = (name: string) =>
     local.find((l) => l.name.toLowerCase() === name.toLowerCase() && l.photo)?.photo ?? null;
   const telOf = (name: string) =>
     local.find((l) => l.name.toLowerCase() === name.toLowerCase() && l.tel)?.tel;
-  const incoming: OrbitItem[] = (data?.inbox ?? []).map((k) => ({
-    id: `in-${k.id}`,
-    dir: "in",
-    name: k.fromName,
-    status: k.caughtAt ? "caught" : "waiting",
-    serverId: k.id,
-    photo: photoOf(k.fromName),
-    hue: k.fromHue,
-    tel: telOf(k.fromName),
-    skin: k.kind,
-    userId: k.fromUserId,
-    toMe: (data?.inbox ?? []).filter((x) => x.fromName.toLowerCase() === k.fromName.toLowerCase())
-      .length,
-    fromMe: (data?.sent ?? []).filter((x) => x.toName.toLowerCase() === k.fromName.toLowerCase())
-      .length,
-  }));
-  const outgoing: OrbitItem[] = (data?.sent ?? []).map((k) => ({
-    id: `out-${k.id}`,
-    dir: "out",
-    name: k.toName,
-    status: k.caught ? "caught" : "waiting",
-    serverId: k.id,
-    photo: photoOf(k.toName),
-    tel: telOf(k.toName),
-    skin: local.find((l) => l.name.toLowerCase() === k.toName.toLowerCase())?.skin,
-    userId: k.toUserId,
-    toMe: (data?.inbox ?? []).filter((x) => x.fromName.toLowerCase() === k.toName.toLowerCase())
-      .length,
-    fromMe: (data?.sent ?? []).filter((x) => x.toName.toLowerCase() === k.toName.toLowerCase())
-      .length,
-  }));
-  const localOnly = local.filter((l) => {
-    if (l.dir !== "out") return !incoming.some((i) => i.name === l.name && i.status === l.status);
-    return !outgoing.some((o) => o.name.toLowerCase() === l.name.toLowerCase());
-  });
-  const waitingIn = incoming.filter((i) => i.status === "waiting");
-  const rest = [...outgoing, ...incoming.filter((i) => i.status === "caught"), ...localOnly];
-  const seen = new Set<string>();
-  const merged: OrbitItem[] = [];
-  for (const item of [...waitingIn, ...rest]) {
-    const key = `${item.dir}:${item.name.toLowerCase()}`;
-    if (seen.has(key) || seen.has(item.id)) continue;
-    seen.add(key);
-    seen.add(item.id);
-    merged.push(item);
-    if (merged.length >= 6) break;
+
+  const inboxBy = new Map<string, NonNullable<HomePayload["inbox"]>>();
+  for (const k of data?.inbox ?? []) {
+    const key = personKey(k.fromName, k.fromUserId);
+    const list = inboxBy.get(key) ?? [];
+    list.push(k);
+    inboxBy.set(key, list);
   }
-  return merged;
+  for (const [, list] of inboxBy) {
+    const k = list[0];
+    if (!k) continue;
+    bump({
+      id: `in-${k.fromUserId || k.fromName}`,
+      dir: "in",
+      name: k.fromName,
+      status: list.some((x) => !x.caughtAt) ? "waiting" : "caught",
+      serverId: list.find((x) => !x.caughtAt)?.id ?? k.id,
+      photo: photoOf(k.fromName),
+      hue: k.fromHue,
+      tel: telOf(k.fromName),
+      skin: k.kind,
+      userId: k.fromUserId,
+      toMe: list.length,
+      fromMe: 0,
+    });
+  }
+
+  const sentBy = new Map<string, NonNullable<HomePayload["sent"]>>();
+  for (const k of data?.sent ?? []) {
+    const key = personKey(k.toName, k.toUserId);
+    const list = sentBy.get(key) ?? [];
+    list.push(k);
+    sentBy.set(key, list);
+  }
+  for (const [, list] of sentBy) {
+    const k = list[0];
+    if (!k) continue;
+    bump({
+      id: `out-${k.toUserId || k.toName}`,
+      dir: "out",
+      name: k.toName,
+      status: list.every((x) => x.caught) ? "caught" : "waiting",
+      serverId: k.id,
+      photo: photoOf(k.toName),
+      tel: telOf(k.toName),
+      userId: k.toUserId,
+      toMe: 0,
+      fromMe: list.length,
+    });
+  }
+
+  const localBy = new Map<string, OrbitItem[]>();
+  for (const l of local) {
+    const key = personKey(l.name, l.userId);
+    if (!key) continue;
+    const list = localBy.get(key) ?? [];
+    list.push(l);
+    localBy.set(key, list);
+  }
+  for (const [key, list] of localBy) {
+    const first = list[0];
+    if (!first) continue;
+    if (people.has(key)) {
+      const cur = people.get(key)!;
+      const photo = list.find((x) => x.photo)?.photo;
+      const tel = list.find((x) => x.tel)?.tel;
+      if (photo) cur.photo = photo;
+      if (tel) cur.tel = tel;
+      continue;
+    }
+    bump({
+      ...first,
+      toMe: list.filter((x) => x.dir === "in").reduce((n, x) => n + (x.toMe ?? 1), 0),
+      fromMe: list.filter((x) => x.dir === "out").reduce((n, x) => n + (x.fromMe ?? 1), 0),
+    });
+  }
+
+  return [...people.values()]
+    .sort((a, b) => {
+      const aw = a.dir === "in" && a.status === "waiting" ? 0 : 1;
+      const bw = b.dir === "in" && b.status === "waiting" ? 0 : 1;
+      if (aw !== bw) return aw - bw;
+      return (b.toMe ?? 0) + (b.fromMe ?? 0) - ((a.toMe ?? 0) + (a.fromMe ?? 0));
+    })
+    .slice(0, 6);
 }
 
 function RankBar({ kisses }: { kisses: number }) {

@@ -2,7 +2,7 @@ import { o as __toESM } from "../_runtime.mjs";
 import { i as require_react, r as require_jsx_runtime } from "../_libs/react+tanstack__react-query.mjs";
 import { n as clsx, t as cva } from "../_libs/class-variance-authority+clsx.mjs";
 import { t as twMerge } from "../_libs/tailwind-merge.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/me-DOFh6TTP.js
+//#region node_modules/.nitro/vite/services/ssr/assets/me-C5yQa7jV.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function HeartMark({ className }) {
@@ -120,6 +120,12 @@ function waHref(tel, text) {
 	const q = encodeURIComponent(text);
 	if (digits.length >= 7) return `https://wa.me/${digits}?text=${q}`;
 	return `https://wa.me/?text=${q}`;
+}
+function smsHref(tel, text) {
+	const digits = phoneDigits(tel);
+	const body = encodeURIComponent(text);
+	if (typeof navigator !== "undefined" && /iPad|iPhone|iPod/i.test(navigator.userAgent)) return digits.length >= 7 ? `sms:${digits}&body=${body}` : `sms:&body=${body}`;
+	return digits.length >= 7 ? `sms:${digits}?body=${body}` : `sms:?body=${body}`;
 }
 function loadRecents() {
 	if (typeof window === "undefined") return [];
@@ -540,4 +546,4 @@ function cropPhoto(file) {
 	});
 }
 //#endregion
-export { unlockSound as C, tinyPhoto as S, playCelebrate as _, KissSky as a, setSoundPrefs as b, cn as c, getSoundPrefs as d, isValidPhone as f, pickFromPhone as g, phoneDigits as h, HeartMark as i, cropPhoto as l, loadRecents as m, CatchScreen as n, LipsMark as o, loadMe as p, ConfettiBurst as r, canPickContacts as s, Button as t, faceTemplate as u, rememberContact as v, waHref as w, soundsOn as x, saveMe as y };
+export { tinyPhoto as C, soundsOn as S, waHref as T, playCelebrate as _, KissSky as a, setSoundPrefs as b, cn as c, getSoundPrefs as d, isValidPhone as f, pickFromPhone as g, phoneDigits as h, HeartMark as i, cropPhoto as l, loadRecents as m, CatchScreen as n, LipsMark as o, loadMe as p, ConfettiBurst as r, canPickContacts as s, Button as t, faceTemplate as u, rememberContact as v, unlockSound as w, smsHref as x, saveMe as y };

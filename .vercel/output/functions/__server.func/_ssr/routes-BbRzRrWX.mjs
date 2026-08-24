@@ -4,10 +4,10 @@ import { v as useNavigate, y as useSearch } from "../_libs/@tanstack/react-route
 import { r as createServerFn } from "./ssr.mjs";
 import { t as GROK_PROVIDERS } from "./server-BjmXTM3N.mjs";
 import { authClient, signIn, signOut } from "./client-Cm1077F-.mjs";
-import { i as createSsrRpc, r as queryClient } from "./router-Dx7h4I9R.mjs";
-import { C as unlockSound, S as tinyPhoto, _ as playCelebrate, a as KissSky, b as setSoundPrefs, c as cn, d as getSoundPrefs, f as isValidPhone, g as pickFromPhone, h as phoneDigits, i as HeartMark, l as cropPhoto, m as loadRecents, n as CatchScreen, o as LipsMark, p as loadMe, r as ConfettiBurst, s as canPickContacts, t as Button, u as faceTemplate, v as rememberContact, w as waHref, x as soundsOn, y as saveMe } from "./me-DOFh6TTP.mjs";
+import { i as createSsrRpc, r as queryClient } from "./router-Bn0FQ7jt.mjs";
+import { C as tinyPhoto, S as soundsOn, T as waHref, _ as playCelebrate, a as KissSky, b as setSoundPrefs, c as cn, d as getSoundPrefs, f as isValidPhone, g as pickFromPhone, h as phoneDigits, i as HeartMark, l as cropPhoto, m as loadRecents, n as CatchScreen, o as LipsMark, p as loadMe, r as ConfettiBurst, s as canPickContacts, t as Button, u as faceTemplate, v as rememberContact, w as unlockSound, x as smsHref, y as saveMe } from "./me-C5yQa7jV.mjs";
 import { i as rankAt, n as isSkin, r as nextRank, t as authMiddleware } from "./ranks-CuwA0vI9.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/routes-BqmjKQzy.js
+//#region node_modules/.nitro/vite/services/ssr/assets/routes-BbRzRrWX.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function BootSplash({ hold, onReady }) {
@@ -29,11 +29,12 @@ function BootSplash({ hold, onReady }) {
 		})]
 	});
 }
-function KissSkin({ skin, className }) {
+function KissSkin({ skin, className, style }) {
 	const id = skin && isSkin(skin) ? skin : "classic";
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("svg", {
 		viewBox: "0 0 64 48",
 		className: cn("kiss-skin", `skin-${id}`, className),
+		style,
 		"aria-hidden": true,
 		children: shape(id)
 	});
@@ -206,6 +207,7 @@ function KissOrbit({ photo, items, onAddPhoto, onCatch, onFace, onReply }) {
 			shown.map((item, i) => {
 				const canCatch = item.dir === "in" && item.status === "waiting";
 				const face = item.photo || faceTemplate(item.name);
+				const n = Math.max(item.toMe ?? 0, item.fromMe ?? 0, 1);
 				return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
 					type: "button",
 					className: `orbit-chip orbit-chip-${i + 1} is-${item.dir} is-${item.status}`,
@@ -221,14 +223,25 @@ function KissOrbit({ photo, items, onAddPhoto, onCatch, onFace, onReply }) {
 					children: [
 						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
 							className: "chip-face",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
-								src: face,
-								alt: "",
-								className: "chip-photo"
-							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KissSkin, {
-								skin: item.skin,
-								className: "chip-kiss"
-							})]
+							children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
+									src: face,
+									alt: "",
+									className: "chip-photo"
+								}),
+								Array.from({ length: Math.min(n, 5) }, (_, k) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(KissSkin, {
+									skin: item.skin,
+									className: "chip-kiss",
+									style: {
+										transform: `translate(${k * 3}px, ${k * -2}px) rotate(${k * 12}deg)`,
+										zIndex: 5 - k
+									}
+								}, k)),
+								n > 1 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+									className: "chip-count",
+									children: ["×", n]
+								}) : null
+							]
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 							className: "orbit-who",
@@ -236,7 +249,7 @@ function KissOrbit({ photo, items, onAddPhoto, onCatch, onFace, onReply }) {
 						}),
 						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 							className: "orbit-meta",
-							children: canCatch ? "open" : "kiss"
+							children: canCatch ? "open" : n > 1 ? `${n} kisses` : "kiss"
 						})
 					]
 				}, item.id);
@@ -244,7 +257,7 @@ function KissOrbit({ photo, items, onAddPhoto, onCatch, onFace, onReply }) {
 		]
 	});
 }
-function LiveKiss({ from, photo, first, count, skin, onClose, onReply, onFlood }) {
+function LiveKiss({ from, photo, first, count, skin, canReply, more, onClose, onReply, onFlood }) {
 	const src = photo || faceTemplate(from);
 	const n = Math.max(1, Math.min(count, 16));
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -303,13 +316,13 @@ function LiveKiss({ from, photo, first, count, skin, onClose, onReply, onFlood }
 						" to you"
 					]
 				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+				canReply !== false ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 					type: "button",
 					className: "live-go",
 					onClick: onReply,
 					children: "Kiss back"
-				}),
-				onFlood ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+				}) : null,
+				canReply !== false && onFlood ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 					type: "button",
 					className: "live-flood",
 					onClick: onFlood,
@@ -319,7 +332,7 @@ function LiveKiss({ from, photo, first, count, skin, onClose, onReply, onFlood }
 					type: "button",
 					className: "live-skip",
 					onClick: onClose,
-					children: "Not now"
+					children: more ? "Next kiss" : "See who"
 				})
 			]
 		})]
@@ -357,6 +370,7 @@ function isLive(lastSeen) {
 var getHome = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(createSsrRpc("c28266f17f8477d6fb68a78c179a7b606959ce3d0ab9e2665015e002bc25179b"));
 createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((data) => data).handler(createSsrRpc("a7cfb66bfe22dc63b14f4fd08b1f0f36f6ae6a5470b9cc261fe57724b010a103"));
 var searchPeople = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((q) => q).handler(createSsrRpc("f266e40787c19954abaef16bb4f1f66a93659ff8bfd4ed146372c984e16733a6"));
+var browsePeople = createServerFn({ method: "GET" }).handler(createSsrRpc("f9896789eb12b16dc8fd72db0206a8ab69e71ba72c28c053a3c3f71e4ea3948e"));
 var matchPhones = createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((phones) => phones).handler(createSsrRpc("5cf015d7a6e57cff719e072a2097d2134b4daa1027aead5828bd0c3b1b24446e"));
 createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((handle) => handle).handler(createSsrRpc("f8ff61ecf89a668eea414148e2c147939689e1a63fb5feb1d0a12a75163684b4"));
 createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((id) => id).handler(createSsrRpc("353b8fc3ff348f1228ef211bc840f602b5aa336ab03fdeb4045c3465e2d3f1f7"));
@@ -423,33 +437,34 @@ function SendSheet({ open, myName, signedIn, mySent, people, target, onClose, on
 	const [busy, setBusy] = (0, import_react.useState)(false);
 	const [error, setError] = (0, import_react.useState)(null);
 	const [hits, setHits] = (0, import_react.useState)([]);
-	const [invite, setInvite] = (0, import_react.useState)(false);
-	const [recents, setRecents] = (0, import_react.useState)([]);
 	const picker = canPickContacts();
 	useKeyboardInset(open);
 	(0, import_react.useEffect)(() => {
-		if (open) {
-			setRecents(loadRecents());
-			setQuery(target?.name ?? "");
-			setTel(target?.tel ?? "");
-			setError(null);
-			setInvite(false);
-			setHits(people);
-		} else {
+		if (!open) {
 			setQuery("");
 			setTel("");
 			setError(null);
 			setHits([]);
+			return;
 		}
-	}, [
-		open,
-		target,
-		people
-	]);
+		setQuery(target?.name ?? "");
+		setTel(target?.tel ?? "");
+		setError(null);
+		setHits(people);
+		browsePeople().then((rows) => {
+			const mine = myName.trim().toLowerCase();
+			setHits(rows.filter((p) => p.displayName.trim().toLowerCase() !== mine));
+		}).catch(() => setHits(people));
+	}, [open, target]);
 	(0, import_react.useEffect)(() => {
-		if (!open || !signedIn) return;
+		if (!open) return;
+		const q = query.trim();
 		const handle = window.setTimeout(() => {
-			searchPeople({ data: query.trim() }).then(setHits).catch(() => setHits([]));
+			if (signedIn) {
+				searchPeople({ data: q }).then(setHits).catch(() => void 0);
+				return;
+			}
+			setHits((prev) => q ? prev.filter((p) => p.displayName.toLowerCase().includes(q.toLowerCase())) : prev);
 		}, 160);
 		return () => window.clearTimeout(handle);
 	}, [
@@ -460,7 +475,7 @@ function SendSheet({ open, myName, signedIn, mySent, people, target, onClose, on
 	if (!open) return null;
 	const body = shareBody(myName, query, tel);
 	const hasPhone = isValidPhone(tel);
-	const shown = hits.length > 0 ? hits : people.filter((p) => !query.trim() ? true : p.displayName.toLowerCase().includes(query.trim().toLowerCase()));
+	const shown = hits;
 	function finishInApp(toName, userId, count = 1) {
 		rememberContact({
 			name: toName,
@@ -476,6 +491,10 @@ function SendSheet({ open, myName, signedIn, mySent, people, target, onClose, on
 		onClose();
 	}
 	function kissPerson(person, count = 1) {
+		if (!signedIn) {
+			setError("Sign in to send inside");
+			return;
+		}
 		setBusy(true);
 		sendKiss({ data: {
 			toUserId: person.userId,
@@ -485,31 +504,25 @@ function SendSheet({ open, myName, signedIn, mySent, people, target, onClose, on
 	}
 	async function onPick() {
 		setError(null);
-		if (picker) {
-			try {
-				const picked = await pickFromPhone();
-				if (picked.length === 0) return;
-				setRecents(loadRecents());
-				if (signedIn) {
-					const matched = await matchPhones({ data: picked.map((c) => c.tel) });
-					if (matched.length > 0) {
-						setHits(matched);
-						setInvite(false);
-						return;
-					}
+		if (!picker) return;
+		try {
+			const picked = await pickFromPhone();
+			if (picked.length === 0) return;
+			if (signedIn) {
+				const matched = await matchPhones({ data: picked.map((c) => c.tel) });
+				if (matched.length > 0) {
+					setHits(matched);
+					return;
 				}
-				const first = picked[0];
-				if (first) {
-					setQuery(first.name);
-					setTel(first.tel);
-					setInvite(true);
-				}
-			} catch (err) {
-				setError(err instanceof Error ? err.message : "Could not open contacts");
 			}
-			return;
+			const first = picked[0];
+			if (first) {
+				setQuery(first.name);
+				setTel(first.tel);
+			}
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Could not open contacts");
 		}
-		setInvite(true);
 	}
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 		className: "sheet-scrim",
@@ -524,7 +537,7 @@ function SendSheet({ open, myName, signedIn, mySent, people, target, onClose, on
 					className: "sheet-head",
 					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 						className: "font-display text-2xl",
-						children: "On KISS"
+						children: "Send inside"
 					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 						type: "button",
 						className: "sheet-x",
@@ -532,6 +545,10 @@ function SendSheet({ open, myName, signedIn, mySent, people, target, onClose, on
 						"aria-label": "Close",
 						children: "Close"
 					})]
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "mt-1 text-sm text-muted",
+					children: "People already on KISS. Tap Kiss — no WhatsApp."
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
 					className: "mt-3",
@@ -542,25 +559,30 @@ function SendSheet({ open, myName, signedIn, mySent, people, target, onClose, on
 						setError(null);
 						if (isValidPhone(v)) setTel(v);
 					},
-					placeholder: "Search people inside",
+					placeholder: "Search who's here",
 					autoComplete: "off"
 				}),
-				signedIn ? shown.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+				!signedIn ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					className: "mt-3 space-y-2",
+					children: GROK_PROVIDERS.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Button, {
+						size: "lg",
+						className: "w-full",
+						onClick: () => void signIn(p.providerId, { callbackURL: "/" }),
+						children: ["Sign in with ", p.label]
+					}, p.providerId))
+				}) : null,
+				shown.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
 					className: "hit-list mt-3",
 					children: shown.map((hit) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", {
 						className: "hit-block",
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-							type: "button",
-							className: "hit",
-							disabled: busy,
-							onClick: () => kissPerson(hit, 1),
-							children: [
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "hit",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
 									src: faceTemplate(hit.displayName),
 									alt: "",
 									className: "hit-face"
-								}),
-								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
 									className: "hit-copy",
 									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
 										className: "hit-name",
@@ -569,52 +591,63 @@ function SendSheet({ open, myName, signedIn, mySent, people, target, onClose, on
 										className: "hit-meta",
 										children: isLive(hit.lastSeen) ? "live now" : "on KISS"
 									})]
-								}),
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-									className: "hit-go",
-									children: busy ? "…" : "Kiss"
-								})
-							]
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-							className: "flood-row",
-							children: [
-								7,
-								21,
-								69
-							].map((n) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-								type: "button",
-								className: "flood-n",
+								})]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
+								size: "lg",
+								className: "mt-1 h-12 w-full rounded-xl font-display text-lg",
 								disabled: busy,
-								onClick: () => kissPerson(hit, n),
-								children: ["×", n]
-							}, n))
-						})]
+								onClick: () => kissPerson(hit, 1),
+								children: busy ? "…" : `Kiss ${hit.displayName.split(" ")[0]}`
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "flood-row",
+								children: [
+									7,
+									21,
+									69
+								].map((n) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+									type: "button",
+									className: "flood-n",
+									disabled: busy,
+									onClick: () => kissPerson(hit, n),
+									children: ["×", n]
+								}, n))
+							})
+						]
 					}, hit.userId))
 				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 					className: "mt-3 text-sm text-muted",
-					children: query.trim() ? "Nobody inside with that name." : "Nobody else is on KISS yet."
-				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-					className: "mt-3 text-sm text-muted",
-					children: "Sign in to kiss people inside the app."
+					children: query.trim() ? "Nobody here with that name." : "You're first. Invite someone below."
 				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+				error ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "mt-2 text-sm text-primary",
+					children: error
+				}) : null,
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "invite-label",
+					children: "Not on KISS yet?"
+				}),
+				picker ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 					type: "button",
-					className: "invite-toggle mt-4",
+					className: "invite-toggle",
 					onClick: () => void onPick(),
-					children: picker ? "Match contacts" : "Invite someone new"
+					children: "Match contacts"
+				}) : null,
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
+					className: "mt-2",
+					value: tel,
+					type: "tel",
+					name: "phone",
+					inputMode: "tel",
+					autoComplete: "tel",
+					onChange: (e) => setTel(e.target.value),
+					placeholder: "Their phone to invite"
 				}),
-				invite || !signedIn && hasPhone ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-					className: "sheet-actions mt-3",
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
-						value: tel,
-						type: "tel",
-						name: "phone",
-						inputMode: "tel",
-						autoComplete: "tel",
-						onChange: (e) => setTel(e.target.value),
-						placeholder: "Their phone"
-					}), hasPhone ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
-						className: "send-wa mt-2",
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					className: "sheet-actions",
+					children: hasPhone ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+						className: "send-wa",
 						href: waHref(tel, body),
 						onClick: (e) => {
 							e.preventDefault();
@@ -630,15 +663,29 @@ function SendSheet({ open, myName, signedIn, mySent, people, target, onClose, on
 							window.location.assign(waHref(tel, body));
 						},
 						children: "WhatsApp invite"
-					}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-						className: "send-wa is-off mt-2",
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
+						className: "send-link",
+						href: smsHref(tel, body),
+						onClick: () => {
+							rememberContact({
+								name: query.trim() || "them",
+								tel
+							});
+							onSent({
+								name: query.trim() || "them",
+								status: "invited",
+								tel
+							});
+						},
+						children: "Messages invite"
+					})] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+						className: "send-wa is-off",
 						children: "WhatsApp invite"
-					})]
-				}) : null,
-				error ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-					className: "mt-2 text-sm text-primary",
-					children: error
-				}) : null
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+						className: "send-link is-off",
+						children: "Messages invite"
+					})] })
+				})
 			]
 		})
 	});
@@ -769,7 +816,11 @@ function Home() {
 	const [burst, setBurst] = (0, import_react.useState)(false);
 	const [sendOpen, setSendOpen] = (0, import_react.useState)(false);
 	const [sendTarget, setSendTarget] = (0, import_react.useState)(null);
-	const [live, setLive] = (0, import_react.useState)(null);
+	const [queue, setQueue] = (0, import_react.useState)([]);
+	const live = queue[0] ?? null;
+	function nextLive() {
+		setQueue((q) => q.slice(1));
+	}
 	const [gate, setGate] = (0, import_react.useState)(false);
 	const [bootReady, setBootReady] = (0, import_react.useState)(false);
 	const [forceGo, setForceGo] = (0, import_react.useState)(false);
@@ -859,23 +910,27 @@ function Home() {
 		const maxId = Math.max(...fresh.map((k) => k.id));
 		const first = me.received === 0;
 		patch({ lastInboxId: maxId });
-		celebrate();
-		notifyKiss(fresh[0]?.fromName ?? "Someone");
-		const fromName = fresh[0]?.fromName ?? "Someone";
-		const fromPhoto = me.orbit.find((o) => o.name === fromName)?.photo ?? null;
-		setLive({
+		const grouped = /* @__PURE__ */ new Map();
+		for (const k of fresh) {
+			const list = grouped.get(k.fromName) ?? [];
+			list.push(k);
+			grouped.set(k.fromName, list);
+		}
+		const next = [...grouped.entries()].map(([fromName, list], i) => ({
 			from: fromName,
-			photo: fromPhoto,
-			first,
-			count: Math.max(1, fresh.length),
-			skin: fresh[0]?.kind
+			photo: me.orbit.find((o) => o.name === fromName)?.photo ?? null,
+			first: first && i === 0,
+			count: list.length,
+			skin: list[0]?.kind,
+			canReply: !(home.data?.sent ?? []).some((s) => s.toName.toLowerCase() === fromName.toLowerCase())
+		}));
+		celebrate(next[0]?.count ?? 1);
+		notifyKiss(next[0]?.from ?? "Someone");
+		setQueue((q) => {
+			const names = new Set(q.map((x) => x.from));
+			return [...q, ...next.filter((x) => !names.has(x.from))];
 		});
-		setSendTarget({
-			name: fromName,
-			tel: me.orbit.find((o) => o.name === fromName)?.tel || "",
-			photo: fromPhoto
-		});
-		if (fresh[0]?.id) catchKiss({ data: fresh[0].id }).then(() => invalidateHome());
+		if (fresh[0]?.id) for (const k of fresh) catchKiss({ data: k.id }).then(() => invalidateHome());
 	}, [home.data?.inbox]);
 	(0, import_react.useEffect)(() => {
 		if (!liveUser || !isValidPhone(me.phone)) return;
@@ -917,8 +972,8 @@ function Home() {
 	const sent = Math.max(me.sent, home.data?.sent.length ?? 0);
 	const received = Math.max(me.received, (home.data?.inbox ?? []).filter((k) => k.caughtAt).length);
 	const phoneOk = isValidPhone(me.phone || home.data?.profile?.phone || search.p || "");
-	const nameOk = (me.name || liveUser?.displayName || "").trim().length >= 2;
-	if (!(me.entered || phoneOk || Boolean(liveUser))) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(KissSky, {
+	const nameOk = (me.name || "").trim().length >= 2;
+	if (!phoneOk) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(KissSky, {
 		quiet: gate,
 		children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 			className: "storm-hero items-center px-5 pb-8 text-center",
@@ -932,37 +987,17 @@ function Home() {
 				children: "Send kiss"
 			})]
 		})
-	}), gate ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Gate, {
-		authOn: true,
-		draftName,
-		draftPhone,
-		onDraftName: setDraftName,
-		onDraftPhone: setDraftPhone,
-		onReady: () => {
-			patch({
-				entered: true,
-				name: draftName.trim(),
-				phone: phoneDigits(draftPhone)
-			});
-			setGate(false);
-			setSendOpen(true);
-		}
-	}) : null] });
-	if (!phoneOk) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(KissSky, {
-		quiet: true,
-		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "stage" })
-	}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PhoneGate, {
-		authOn: true,
-		name: displayName,
-		draftPhone: draftPhone || me.phone,
+	}), gate ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(PhoneGate, {
+		draftPhone: draftPhone || me.phone || search.p || "",
 		onDraftPhone: setDraftPhone,
 		onReady: (phone) => {
 			patch({
 				entered: true,
 				phone
 			});
+			setGate(false);
 		}
-	})] });
+	}) : null] });
 	if (!nameOk) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(KissSky, {
 		quiet: true,
 		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "stage" })
@@ -1020,13 +1055,14 @@ function Home() {
 										return next;
 									});
 								}
-								setLive({
+								setQueue((q) => [{
 									from: item.name,
 									photo: item.photo ?? null,
 									first: isWaiting && received === 0,
 									count: Math.max(1, item.toMe ?? (item.dir === "in" ? 1 : 0)),
-									skin: item.skin
-								});
+									skin: item.skin,
+									canReply: item.fromMe === 0
+								}, ...q.filter((x) => x.from !== item.name)]);
 								setSendTarget({
 									name: item.name,
 									tel: item.tel || "",
@@ -1241,12 +1277,14 @@ function Home() {
 			first: live.first,
 			count: live.count,
 			skin: live.skin,
-			onClose: () => setLive(null),
+			canReply: live.canReply !== false,
+			more: queue.length > 1,
+			onClose: nextLive,
 			onReply: () => {
 				const from = live.from;
 				const rec = loadRecents().find((c) => c.name.toLowerCase() === from.toLowerCase());
 				const person = (home.data?.people ?? []).find((p) => p.displayName.toLowerCase() === from.toLowerCase());
-				setLive(null);
+				nextLive();
 				if (person && liveUser) {
 					sendKiss({ data: {
 						toUserId: person.userId,
@@ -1269,7 +1307,7 @@ function Home() {
 			onFlood: () => {
 				const from = live.from;
 				const person = (home.data?.people ?? []).find((p) => p.displayName.toLowerCase() === from.toLowerCase());
-				setLive(null);
+				nextLive();
 				if (person && liveUser) sendKiss({ data: {
 					toUserId: person.userId,
 					kind: rankAt(sent).skin,
@@ -1291,56 +1329,116 @@ function Home() {
 	] });
 }
 function mergeOrbit(local, data) {
+	const people = /* @__PURE__ */ new Map();
+	function personKey(name, userId) {
+		return (userId || name).trim().toLowerCase();
+	}
+	function bump(item) {
+		const key = personKey(item.name, item.userId);
+		if (!key) return;
+		const cur = people.get(key);
+		if (!cur) {
+			people.set(key, {
+				...item,
+				id: `p-${key}`,
+				toMe: item.toMe ?? (item.dir === "in" ? 1 : 0),
+				fromMe: item.fromMe ?? (item.dir === "out" ? 1 : 0)
+			});
+			return;
+		}
+		cur.toMe = (cur.toMe ?? 0) + (item.toMe ?? (item.dir === "in" ? 1 : 0));
+		cur.fromMe = (cur.fromMe ?? 0) + (item.fromMe ?? (item.dir === "out" ? 1 : 0));
+		if (item.photo) cur.photo = item.photo;
+		if (item.userId) cur.userId = item.userId;
+		if (item.tel) cur.tel = item.tel;
+		if (item.skin) cur.skin = item.skin;
+		if (item.dir === "in") cur.dir = "in";
+		if (item.status === "waiting") {
+			cur.status = "waiting";
+			if (item.serverId) cur.serverId = item.serverId;
+		}
+	}
 	const photoOf = (name) => local.find((l) => l.name.toLowerCase() === name.toLowerCase() && l.photo)?.photo ?? null;
 	const telOf = (name) => local.find((l) => l.name.toLowerCase() === name.toLowerCase() && l.tel)?.tel;
-	const incoming = (data?.inbox ?? []).map((k) => ({
-		id: `in-${k.id}`,
-		dir: "in",
-		name: k.fromName,
-		status: k.caughtAt ? "caught" : "waiting",
-		serverId: k.id,
-		photo: photoOf(k.fromName),
-		hue: k.fromHue,
-		tel: telOf(k.fromName),
-		skin: k.kind,
-		userId: k.fromUserId,
-		toMe: (data?.inbox ?? []).filter((x) => x.fromName.toLowerCase() === k.fromName.toLowerCase()).length,
-		fromMe: (data?.sent ?? []).filter((x) => x.toName.toLowerCase() === k.fromName.toLowerCase()).length
-	}));
-	const outgoing = (data?.sent ?? []).map((k) => ({
-		id: `out-${k.id}`,
-		dir: "out",
-		name: k.toName,
-		status: k.caught ? "caught" : "waiting",
-		serverId: k.id,
-		photo: photoOf(k.toName),
-		tel: telOf(k.toName),
-		skin: local.find((l) => l.name.toLowerCase() === k.toName.toLowerCase())?.skin,
-		userId: k.toUserId,
-		toMe: (data?.inbox ?? []).filter((x) => x.fromName.toLowerCase() === k.toName.toLowerCase()).length,
-		fromMe: (data?.sent ?? []).filter((x) => x.toName.toLowerCase() === k.toName.toLowerCase()).length
-	}));
-	const localOnly = local.filter((l) => {
-		if (l.dir !== "out") return !incoming.some((i) => i.name === l.name && i.status === l.status);
-		return !outgoing.some((o) => o.name.toLowerCase() === l.name.toLowerCase());
-	});
-	const waitingIn = incoming.filter((i) => i.status === "waiting");
-	const rest = [
-		...outgoing,
-		...incoming.filter((i) => i.status === "caught"),
-		...localOnly
-	];
-	const seen = /* @__PURE__ */ new Set();
-	const merged = [];
-	for (const item of [...waitingIn, ...rest]) {
-		const key = `${item.dir}:${item.name.toLowerCase()}`;
-		if (seen.has(key) || seen.has(item.id)) continue;
-		seen.add(key);
-		seen.add(item.id);
-		merged.push(item);
-		if (merged.length >= 6) break;
+	const inboxBy = /* @__PURE__ */ new Map();
+	for (const k of data?.inbox ?? []) {
+		const key = personKey(k.fromName, k.fromUserId);
+		const list = inboxBy.get(key) ?? [];
+		list.push(k);
+		inboxBy.set(key, list);
 	}
-	return merged;
+	for (const [, list] of inboxBy) {
+		const k = list[0];
+		if (!k) continue;
+		bump({
+			id: `in-${k.fromUserId || k.fromName}`,
+			dir: "in",
+			name: k.fromName,
+			status: list.some((x) => !x.caughtAt) ? "waiting" : "caught",
+			serverId: list.find((x) => !x.caughtAt)?.id ?? k.id,
+			photo: photoOf(k.fromName),
+			hue: k.fromHue,
+			tel: telOf(k.fromName),
+			skin: k.kind,
+			userId: k.fromUserId,
+			toMe: list.length,
+			fromMe: 0
+		});
+	}
+	const sentBy = /* @__PURE__ */ new Map();
+	for (const k of data?.sent ?? []) {
+		const key = personKey(k.toName, k.toUserId);
+		const list = sentBy.get(key) ?? [];
+		list.push(k);
+		sentBy.set(key, list);
+	}
+	for (const [, list] of sentBy) {
+		const k = list[0];
+		if (!k) continue;
+		bump({
+			id: `out-${k.toUserId || k.toName}`,
+			dir: "out",
+			name: k.toName,
+			status: list.every((x) => x.caught) ? "caught" : "waiting",
+			serverId: k.id,
+			photo: photoOf(k.toName),
+			tel: telOf(k.toName),
+			userId: k.toUserId,
+			toMe: 0,
+			fromMe: list.length
+		});
+	}
+	const localBy = /* @__PURE__ */ new Map();
+	for (const l of local) {
+		const key = personKey(l.name, l.userId);
+		if (!key) continue;
+		const list = localBy.get(key) ?? [];
+		list.push(l);
+		localBy.set(key, list);
+	}
+	for (const [key, list] of localBy) {
+		const first = list[0];
+		if (!first) continue;
+		if (people.has(key)) {
+			const cur = people.get(key);
+			const photo = list.find((x) => x.photo)?.photo;
+			const tel = list.find((x) => x.tel)?.tel;
+			if (photo) cur.photo = photo;
+			if (tel) cur.tel = tel;
+			continue;
+		}
+		bump({
+			...first,
+			toMe: list.filter((x) => x.dir === "in").reduce((n, x) => n + (x.toMe ?? 1), 0),
+			fromMe: list.filter((x) => x.dir === "out").reduce((n, x) => n + (x.fromMe ?? 1), 0)
+		});
+	}
+	return [...people.values()].sort((a, b) => {
+		const aw = a.dir === "in" && a.status === "waiting" ? 0 : 1;
+		const bw = b.dir === "in" && b.status === "waiting" ? 0 : 1;
+		if (aw !== bw) return aw - bw;
+		return (b.toMe ?? 0) + (b.fromMe ?? 0) - ((a.toMe ?? 0) + (a.fromMe ?? 0));
+	}).slice(0, 6);
 }
 function RankBar({ kisses }) {
 	const rank = rankAt(kisses);
@@ -1406,66 +1504,6 @@ function NameLine({ value, onChange }) {
 		})
 	});
 }
-function Gate({ authOn, draftName, draftPhone, onDraftName, onDraftPhone, onReady }) {
-	const ready = draftName.trim().length >= 2 && isValidPhone(draftPhone);
-	useKeyboardInset(true);
-	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-		className: "sheet-scrim",
-		children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-			className: "sheet",
-			role: "dialog",
-			"aria-label": "Who you are",
-			children: [
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-					className: "font-display text-2xl",
-					children: "Your number"
-				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-					className: "mt-1 text-sm text-muted",
-					children: "Friends find you by phone. No number, no find."
-				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
-					className: "mt-4",
-					value: draftName,
-					onChange: (e) => onDraftName(e.target.value),
-					placeholder: "Your name",
-					autoComplete: "name"
-				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
-					className: "mt-2",
-					value: draftPhone,
-					onChange: (e) => onDraftPhone(e.target.value),
-					placeholder: "Your phone",
-					type: "tel",
-					name: "phone",
-					inputMode: "tel",
-					autoComplete: "tel"
-				}),
-				authOn ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-					className: "mt-4 space-y-2",
-					children: GROK_PROVIDERS.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Button, {
-						variant: "secondary",
-						size: "lg",
-						className: "w-full",
-						disabled: !ready,
-						onClick: () => {
-							onReady();
-							signIn(p.providerId, { callbackURL: "/" });
-						},
-						children: ["Continue with ", p.label]
-					}, p.providerId))
-				}) : null,
-				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
-					size: "lg",
-					className: "mt-3 w-full",
-					disabled: !ready,
-					onClick: onReady,
-					children: "Continue"
-				})
-			]
-		})
-	});
-}
 function NameGate({ draftName, onDraftName, onReady }) {
 	const ready = draftName.trim().length >= 2;
 	useKeyboardInset(true);
@@ -1478,17 +1516,17 @@ function NameGate({ draftName, onDraftName, onReady }) {
 			children: [
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 					className: "font-display text-2xl",
-					children: "Your name"
+					children: "Full name"
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 					className: "mt-1 text-sm text-muted",
-					children: "Number is already on this kiss. Just say who you are."
+					children: "This is how kisses find you."
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
 					className: "mt-4",
 					value: draftName,
 					onChange: (e) => onDraftName(e.target.value),
-					placeholder: "Your name",
+					placeholder: "Full name",
 					autoComplete: "name"
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
@@ -1496,62 +1534,89 @@ function NameGate({ draftName, onDraftName, onReady }) {
 					className: "mt-4 w-full",
 					disabled: !ready,
 					onClick: () => onReady(draftName.trim()),
-					children: "Continue"
+					children: "Confirm"
 				})
 			]
 		})
 	});
 }
-function PhoneGate({ authOn, name, draftPhone, onDraftPhone, onReady }) {
-	const ready = isValidPhone(draftPhone);
+function PhoneGate({ draftPhone, onDraftPhone, onReady }) {
+	const [step, setStep] = (0, import_react.useState)("phone");
+	const [code, setCode] = (0, import_react.useState)("");
+	const digits = phoneDigits(draftPhone);
+	const last4 = digits.slice(-4);
+	const phoneReady = isValidPhone(draftPhone);
+	const codeReady = code.replace(/\D/g, "").length === 4;
 	useKeyboardInset(true);
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 		className: "sheet-scrim",
-		children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 			className: "sheet",
 			role: "dialog",
 			"aria-label": "Your phone",
-			children: [
+			children: step === "phone" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 					className: "font-display text-2xl",
 					children: "Your number"
 				}),
-				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 					className: "mt-1 text-sm text-muted",
-					children: [name, ", people find you from their contacts. Add the number they already have."]
+					children: "Confirm the phone people already have."
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
 					className: "mt-4",
 					value: draftPhone,
 					onChange: (e) => onDraftPhone(e.target.value),
-					placeholder: "Your phone",
+					placeholder: "Phone number",
 					type: "tel",
 					name: "phone",
 					inputMode: "tel",
 					autoComplete: "tel"
 				}),
-				authOn ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-					className: "mt-4 space-y-2",
-					children: GROK_PROVIDERS.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Button, {
-						variant: "secondary",
-						size: "lg",
-						className: "w-full",
-						disabled: !ready,
-						onClick: () => {
-							onReady(phoneDigits(draftPhone));
-							signIn(p.providerId, { callbackURL: "/" });
-						},
-						children: ["Save with ", p.label]
-					}, p.providerId))
-				}) : null,
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
 					size: "lg",
-					className: "mt-3 w-full",
-					disabled: !ready,
-					onClick: () => onReady(phoneDigits(draftPhone)),
-					children: "Save number"
+					className: "mt-4 w-full",
+					disabled: !phoneReady,
+					onClick: () => setStep("code"),
+					children: "Confirm"
 				})
-			]
+			] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "font-display text-2xl",
+					children: "SMS code"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+					className: "mt-1 text-sm text-muted",
+					children: [
+						"Enter the last 4 digits of ",
+						digits,
+						"."
+					]
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
+					className: "mt-4",
+					value: code,
+					onChange: (e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4)),
+					placeholder: "••••",
+					type: "tel",
+					inputMode: "numeric",
+					autoComplete: "one-time-code"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
+					size: "lg",
+					className: "mt-4 w-full",
+					disabled: !codeReady,
+					onClick: () => {
+						if (code !== last4) return;
+						onReady(digits);
+					},
+					children: "Confirm"
+				}),
+				codeReady && code !== last4 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "mt-2 text-sm text-primary",
+					children: "That code does not match."
+				}) : null
+			] })
 		})
 	});
 }

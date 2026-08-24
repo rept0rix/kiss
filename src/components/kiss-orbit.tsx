@@ -55,6 +55,7 @@ export function KissOrbit({
       {shown.map((item, i) => {
         const canCatch = item.dir === "in" && item.status === "waiting";
         const face = item.photo || faceTemplate(item.name);
+        const n = Math.max(item.toMe ?? 0, item.fromMe ?? 0, 1);
         return (
           <button
             key={item.id}
@@ -72,10 +73,21 @@ export function KissOrbit({
           >
             <span className="chip-face">
               <img src={face} alt="" className="chip-photo" />
-              <KissSkin skin={item.skin} className="chip-kiss" />
+              {Array.from({ length: Math.min(n, 5) }, (_, k) => (
+                <KissSkin
+                  key={k}
+                  skin={item.skin}
+                  className="chip-kiss"
+                  style={{
+                    transform: `translate(${k * 3}px, ${k * -2}px) rotate(${k * 12}deg)`,
+                    zIndex: 5 - k,
+                  }}
+                />
+              ))}
+              {n > 1 ? <span className="chip-count">×{n}</span> : null}
             </span>
             <span className="orbit-who">{item.name}</span>
-            <span className="orbit-meta">{canCatch ? "open" : "kiss"}</span>
+            <span className="orbit-meta">{canCatch ? "open" : n > 1 ? `${n} kisses` : "kiss"}</span>
           </button>
         );
       })}
