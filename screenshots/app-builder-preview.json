@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "KISS",
+      "hasCanvas": false,
+      "bodyTextLen": 86,
+      "bodyTextHash": "cb7539989be2fa20f065ed05a8731a498c075e04c8b9b6d1e5e8040829c99ca5",
+      "bodyTextPrefix": "NO FEED. NO CHAT. KISS Throw one at a face. They feel it. That i",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "KISS",
+      "hasCanvas": false,
+      "bodyTextLen": 86,
+      "bodyTextHash": "cb7539989be2fa20f065ed05a8731a498c075e04c8b9b6d1e5e8040829c99ca5",
+      "bodyTextPrefix": "NO FEED. NO CHAT. KISS Throw one at a face. They feel it. That i",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}
