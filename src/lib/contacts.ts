@@ -95,25 +95,56 @@ export function tinyPhoto(blob: Blob): Promise<string | null> {
 }
 
 export function phoneDigits(raw: string): string {
-  const trimmed = raw.trim();
-  const d = trimmed.replace(/\D/g, "");
-  if (trimmed.startsWith("+")) return d;
-  if (d.startsWith("00")) return d.slice(2);
+  return waPhone(raw);
+}
+
+/** WhatsApp wants country code + number, no +, no 0, no dashes. */
+export function waPhone(raw: string): string {
+  let d = raw.replace(/\D/g, "");
+  if (d.startsWith("00")) d = d.slice(2);
+  if (d.startsWith("9720")) d = `972${d.slice(4)}`;
+  if (d.startsWith("0") && d.length >= 9 && d.length <= 11) d = `972${d.slice(1)}`;
+  if (!d.startsWith("972") && d.length === 9 && d.startsWith("5")) d = `972${d}`;
   return d;
 }
 
 export function isValidPhone(raw: string): boolean {
-  const d = phoneDigits(raw);
+  const d = waPhone(raw);
   return d.length >= 8 && d.length <= 15;
 }
 
 export function waHref(tel: string, text: string): string {
-  const digits = phoneDigits(tel);
+  const digits = waPhone(tel);
   const q = encodeURIComponent(text);
-  if (digits.length >= 7) {
-    return `https://wa.me/${digits}?text=${q}`;
+  if (digits.length < 8) return `https://api.whatsapp.com/send/?text=${q}`;
+  return `whatsapp://send?phone=${digits}&text=${q}`;
+}
+
+export function waWebHref(tel: string, text: string): string {
+  const digits = waPhone(tel);
+  const q = encodeURIComponent(text);
+  if (digits.length < 8) {
+    return `https://api.whatsapp.com/send/?text=${q}&type=phone_number&app_absent=0`;
   }
-  return `https://wa.me/?text=${q}`;
+  return `https://api.whatsapp.com/send/?phone=${digits}&text=${q}&type=phone_number&app_absent=0`;
+}
+
+export function openWhatsApp(tel: string, text: string): void {
+  const app = waHref(tel, text);
+  const web = waWebHref(tel, text);
+  const framed = typeof window !== "undefined" && window.top !== window;
+  try {
+    if (framed) {
+      window.open(app, "_blank");
+    } else {
+      window.location.href = app;
+    }
+  } catch {
+    /* ignore */
+  }
+  window.setTimeout(() => {
+    window.open(web, "_blank", "noopener,noreferrer");
+  }, 700);
 }
 
 export function smsHref(tel: string, text: string): string {

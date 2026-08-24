@@ -254,6 +254,50 @@
 .boot-k-7, .boot-h-7 { width: 4rem; right: 8%; top: 52%; animation: kiss-fly-a 7.5s linear infinite; animation-delay: -4s; }
 .boot-k-8, .boot-h-8 { width: 3.2rem; left: 55%; bottom: 10%; animation: kiss-fly-b 8.5s linear infinite; animation-delay: -2.5s; }
 
+.boot-meter {
+  position: absolute;
+  right: 1.5rem;
+  bottom: max(2rem, env(safe-area-inset-bottom));
+  left: 1.5rem;
+  z-index: 2;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.boot-track {
+  height: 0.45rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.22);
+}
+
+.boot.is-dark .boot-track {
+  background: rgb(225 29 46 / 0.28);
+}
+
+.boot-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: #070707;
+  transition: width 80ms linear;
+}
+
+.boot.is-dark .boot-fill {
+  background: #e11d2e;
+}
+
+.boot-pct {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  color: #070707;
+}
+
+.boot.is-dark .boot-pct {
+  color: #e11d2e;
+}
+
 .welcome-word {
   position: absolute;
   inset: 0;
@@ -353,13 +397,40 @@
 }
 
 .chip-photo,
-.chip-initials {
+.chip-initials,
+.chip-face .face-init {
   display: grid;
   width: 3.25rem;
   height: 3.25rem;
   place-items: center;
   border-radius: 999px;
   box-shadow: 0 0 0 2px var(--color-primary);
+}
+
+.face-init {
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: #fff;
+  font-family: var(--font-display);
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.hit-face.face-init,
+.hit-face {
+  width: 2.4rem;
+  height: 2.4rem;
+  object-fit: cover;
+  border-radius: 999px;
+  font-size: 0.7rem;
+}
+
+.live-face .face-init {
+  width: 12rem;
+  height: 12rem;
+  font-size: 3rem;
+  box-shadow: 0 0 0 5px var(--color-primary);
 }
 
 .chip-photo {
@@ -522,20 +593,20 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  background: rgb(7 7 7 / 0.78);
-  padding-bottom: var(--kb, 0px);
+  background: rgb(7 7 7 / 0.55);
+  padding: 0 0.7rem max(0.7rem, env(safe-area-inset-bottom));
+  padding-bottom: max(0.7rem, calc(var(--kb, 0px) + 0.5rem));
 }
 
 .sheet {
   width: 100%;
-  max-width: 28rem;
-  max-height: calc(100dvh - var(--kb, 0px) - 3.5rem);
+  max-width: 22rem;
+  max-height: min(22rem, 52dvh);
   overflow: auto;
-  border-radius: 1.25rem 1.25rem 0 0;
+  border-radius: 1rem;
   background: var(--color-surface);
   color: var(--color-fg);
-  padding: 1rem 1rem 0.75rem;
-  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  padding: 0.75rem 0.85rem 0.65rem;
 }
 
 .sheet-head {
@@ -894,7 +965,55 @@ body.sheet-open {
   z-index: 90;
   display: grid;
   place-items: center;
-  background: rgb(7 7 7 / 0.88);
+  background: rgb(7 7 7 / 0.92);
+}
+
+.love-rain {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.love-drop {
+  position: absolute;
+  top: -8%;
+  color: var(--color-primary);
+  animation: love-fall linear infinite;
+}
+
+.love-drop svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+@keyframes love-fall {
+  0% {
+    transform: translateY(0) rotate(0deg) scale(0.5);
+    opacity: 0;
+  }
+  12% { opacity: 1; }
+  100% {
+    transform: translateY(115vh) rotate(var(--spin, 20deg)) scale(1.2);
+    opacity: 0;
+  }
+}
+
+.love-glow {
+  box-shadow: 0 0 0 5px var(--color-primary), 0 0 80px rgb(225 29 46 / 0.55);
+  animation: live-pop 0.55s cubic-bezier(0.22, 1, 0.36, 1) both, love-pulse 1.6s ease-in-out 0.5s infinite;
+}
+
+@keyframes love-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+
+.live-love-line {
+  margin-top: 0.35rem;
+  color: #ff8a96;
+  font-size: 0.95rem;
 }
 
 .live-card {
@@ -908,11 +1027,12 @@ body.sheet-open {
 .live-face {
   position: relative;
   display: grid;
-  width: 9.5rem;
-  height: 9.5rem;
+  width: 12rem;
+  height: 12rem;
   place-items: center;
   padding: 0;
   background: transparent;
+  border-radius: 999px;
   animation: live-pop 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -942,12 +1062,13 @@ body.sheet-open {
   to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
 }
 
-.live-face img {
-  width: 9.5rem;
-  height: 9.5rem;
+.live-face img,
+.live-face .face-init {
+  width: 12rem;
+  height: 12rem;
   object-fit: cover;
   border-radius: 999px;
-  box-shadow: 0 0 0 4px var(--color-primary);
+  font-size: 3rem;
 }
 
 .live-stamp {

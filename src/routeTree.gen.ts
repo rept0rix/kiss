@@ -16,6 +16,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as KFromRouteImport } from './routes/k.$from'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiOgCodeRouteImport } from './routes/api/og.$code'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -52,6 +53,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiOgCodeRoute = ApiOgCodeRouteImport.update({
+  id: '/api/og/$code',
+  path: '/api/og/$code',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -61,6 +67,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof ProfileRoute
   '/k/$from': typeof KFromRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/og/$code': typeof ApiOgCodeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -70,6 +77,7 @@ export interface FileRoutesByTo {
   '/profile': typeof ProfileRoute
   '/k/$from': typeof KFromRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/og/$code': typeof ApiOgCodeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -80,6 +88,7 @@ export interface FileRoutesById {
   '/profile': typeof ProfileRoute
   '/k/$from': typeof KFromRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/og/$code': typeof ApiOgCodeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -91,6 +100,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/k/$from'
     | '/api/auth/$'
+    | '/api/og/$code'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -100,6 +110,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/k/$from'
     | '/api/auth/$'
+    | '/api/og/$code'
   id:
     | '__root__'
     | '/'
@@ -109,6 +120,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/k/$from'
     | '/api/auth/$'
+    | '/api/og/$code'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -119,6 +131,7 @@ export interface RootRouteChildren {
   ProfileRoute: typeof ProfileRoute
   KFromRoute: typeof KFromRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiOgCodeRoute: typeof ApiOgCodeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -172,6 +185,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/og/$code': {
+      id: '/api/og/$code'
+      path: '/api/og/$code'
+      fullPath: '/api/og/$code'
+      preLoaderRoute: typeof ApiOgCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -183,6 +203,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProfileRoute: ProfileRoute,
   KFromRoute: KFromRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiOgCodeRoute: ApiOgCodeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

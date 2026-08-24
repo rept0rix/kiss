@@ -1,6 +1,7 @@
 import { useRef } from "react";
-import { faceTemplate, tinyPhoto } from "@/lib/contacts";
+import { tinyPhoto } from "@/lib/contacts";
 import type { OrbitItem } from "@/lib/kisses/types";
+import { Face } from "./face";
 import { KissSkin } from "./kiss-skin";
 
 export function KissOrbit({
@@ -49,22 +50,18 @@ export function KissOrbit({
         {photo ? (
           <img src={photo} alt="" className="orbit-photo" />
         ) : (
-          <img src={faceTemplate("you")} alt="" className="orbit-photo" />
+          <span className="orbit-empty">Add photo</span>
         )}
       </button>
       {shown.map((item, i) => {
         const canCatch = item.dir === "in" && item.status === "waiting";
-        const face = item.photo || faceTemplate(item.name);
         const n = Math.max(item.toMe ?? 0, item.fromMe ?? 0, 1);
         return (
           <button
             key={item.id}
             type="button"
             className={`orbit-chip orbit-chip-${i + 1} is-${item.dir} is-${item.status}`}
-            onClick={() => {
-              if (item.dir === "in") onCatch(item);
-              else onReply(item);
-            }}
+            onClick={() => onCatch(item)}
             onContextMenu={(e) => {
               e.preventDefault();
               pending.current = item.id;
@@ -72,7 +69,7 @@ export function KissOrbit({
             }}
           >
             <span className="chip-face">
-              <img src={face} alt="" className="chip-photo" />
+              <Face name={item.name} photo={item.photo} className="chip-photo" />
               {Array.from({ length: Math.min(n, 5) }, (_, k) => (
                 <KissSkin
                   key={k}

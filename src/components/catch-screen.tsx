@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { faceTemplate } from "@/lib/contacts";
+import { Face } from "./face";
 import { ConfettiBurst } from "./confetti-burst";
 import { KissSky } from "./kiss-sky";
 import { LipsMark } from "./lips-mark";
@@ -19,14 +19,13 @@ export function CatchScreen({
 }) {
   const [caught, setCaught] = useState(false);
   const who = from.trim() || "Someone";
-  const src = photo || faceTemplate(who);
 
   return (
     <KissSky>
       <ConfettiBurst show={caught || Boolean(first)} />
       <div className="stage">
         <span className="live-face">
-          <img src={src} alt="" />
+          <Face name={who} photo={photo} />
           <LipsMark className="live-stamp" />
         </span>
         <p className="live-kicker mt-6">{first ? "Your first kiss" : "Incoming"}</p>

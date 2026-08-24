@@ -11,6 +11,7 @@ export type MeState = {
   sent: number;
   received: number;
   lastInboxId: number;
+  lastPhoneId: number;
   orbit: OrbitItem[];
 };
 
@@ -22,6 +23,7 @@ const EMPTY: MeState = {
   sent: 0,
   received: 0,
   lastInboxId: 0,
+  lastPhoneId: 0,
   orbit: [],
 };
 
@@ -50,6 +52,7 @@ export function loadMe(): MeState {
       sent: Number(parsed.sent) || 0,
       received: Number(parsed.received) || 0,
       lastInboxId: Number(parsed.lastInboxId) || 0,
+      lastPhoneId: Number(parsed.lastPhoneId) || 0,
       orbit: Array.isArray(parsed.orbit) ? parsed.orbit.slice(0, 16) : [],
     };
   } catch {

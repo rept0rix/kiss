@@ -10,11 +10,11 @@ import { SendSheet, type SendTarget } from "@/components/send-sheet";
 import { SoundSettings } from "@/components/sound-settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { invalidateHome, useHome } from "@/hooks/use-home";
+import { invalidateHome, invalidatePhoneInbox, useHome, usePhoneInbox } from "@/hooks/use-home";
 import { useKeyboardInset } from "@/hooks/use-keyboard";
 import { GROK_PROVIDERS, authEnabled, signIn, signOut } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { catchKiss, sendKiss, setDisplayName, setPhone } from "@/lib/kisses/server";
+import { catchKiss, catchPhoneKiss, registerPhone, searchDirectory, sendKiss, setDisplayName, setPhone } from "@/lib/kisses/server";
 import { isLive } from "@/lib/kisses/online";
 import { nextRank, rankAt } from "@/lib/kisses/ranks";
 import type { HomePayload, OrbitItem } from "@/lib/kisses/types";
@@ -34,7 +34,7 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
-  const { user, isPending } = useCurrentUserState();
+  const { user } = useCurrentUserState();
   const search = useSearch({ from: "/" });
   const navigate = useNavigate();
   const [me, setMe] = useState<MeState>(() => loadMe());
@@ -49,6 +49,7 @@ function Home() {
       count: number;
       skin?: string | null;
       canReply?: boolean;
+      inbound?: boolean;
     }>
   >([]);
   const live = queue[0] ?? null;
@@ -57,19 +58,14 @@ function Home() {
     setQueue((q) => q.slice(1));
   }
   const [gate, setGate] = useState(false);
-  const [bootReady, setBootReady] = useState(false);
-  const [forceGo, setForceGo] = useState(false);
+  const [bootReady, setBootReady] = useState(() => Boolean(loadMe().entered));
   const [settings, setSettings] = useState(false);
-
-  useEffect(() => {
-    const t = window.setTimeout(() => setForceGo(true), 3200);
-    return () => window.clearTimeout(t);
-  }, []);
   const [draftName, setDraftName] = useState("");
   const [draftPhone, setDraftPhone] = useState("");
   const photoRef = useRef<HTMLInputElement>(null);
   const liveUser = user && !user.isDevFallback ? user : null;
   const home = useHome(Boolean(liveUser));
+  const phoneBox = usePhoneInbox(me.phone);
 
   function patch(partial: Partial<MeState>) {
     setMe((prev) => {
@@ -161,6 +157,7 @@ function Home() {
       count: list.length,
       skin: list[0]?.kind,
       canReply: !(home.data?.sent ?? []).some((s) => s.toName.toLowerCase() === fromName.toLowerCase()),
+      inbound: true,
     }));
     celebrate(next[0]?.count ?? 1);
     notifyKiss(next[0]?.from ?? "Someone");
@@ -178,16 +175,55 @@ function Home() {
   }, [home.data?.inbox]);
 
   useEffect(() => {
+    if (!isValidPhone(me.phone)) return;
+    void registerPhone({ data: { phone: me.phone, name: me.name, photo: me.photo } }).catch(() => undefined);
+  }, [me.phone, me.name]);
+
+  useEffect(() => {
     if (!liveUser || !isValidPhone(me.phone)) return;
     void setPhone({ data: me.phone }).catch(() => undefined);
   }, [liveUser, me.phone]);
+
+  useEffect(() => {
+    const inbox = phoneBox.data ?? [];
+    const fresh = inbox.filter((k) => k.id > me.lastPhoneId);
+    if (fresh.length === 0) return;
+    const maxId = Math.max(...fresh.map((k) => k.id));
+    const first = me.received === 0;
+    patch({ lastPhoneId: maxId, received: me.received + fresh.reduce((s, k) => s + k.count, 0) });
+    const grouped = new Map<string, typeof fresh>();
+    for (const k of fresh) {
+      const list = grouped.get(k.fromName) ?? [];
+      list.push(k);
+      grouped.set(k.fromName, list);
+    }
+    const next = [...grouped.entries()].map(([fromName, list], i) => ({
+      from: fromName,
+      photo: me.orbit.find((o) => o.name === fromName)?.photo ?? null,
+      first: first && i === 0,
+      count: list.reduce((s, k) => s + k.count, 0),
+      skin: list[0]?.kind,
+      canReply: true,
+      inbound: true,
+    }));
+    celebrate(next[0]?.count ?? 1);
+    notifyKiss(next[0]?.from ?? "Someone");
+    setQueue((q) => {
+      const names = new Set(q.map((x) => x.from));
+      return [...q, ...next.filter((x) => !names.has(x.from))];
+    });
+    for (const k of fresh) {
+      void catchPhoneKiss({ data: k.id }).then(() => invalidatePhoneInbox());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phoneBox.data]);
 
   const orbit = useMemo(
     () => mergeOrbit(me.orbit, home.data),
     [me.orbit, home.data],
   );
 
-  if (!forceGo && !bootReady) {
+  if (!bootReady) {
     return <BootSplash onReady={() => setBootReady(true)} />;
   }
 
@@ -253,6 +289,7 @@ function Home() {
             onDraftPhone={setDraftPhone}
             onReady={(phone) => {
               patch({ entered: true, phone });
+              void registerPhone({ data: { phone, name: me.name } }).catch(() => undefined);
               setGate(false);
             }}
           />
@@ -272,6 +309,7 @@ function Home() {
           onDraftName={setDraftName}
           onReady={(name) => {
             patch({ entered: true, name });
+            if (me.phone) void registerPhone({ data: { phone: me.phone, name } }).catch(() => undefined);
             if (liveUser) void setDisplayName({ data: name });
           }}
         />
@@ -301,9 +339,16 @@ function Home() {
           items={orbit}
           onAddPhoto={() => photoRef.current?.click()}
           onCatch={(item) => {
+            const rec = loadRecents().find((c) => c.name.toLowerCase() === item.name.toLowerCase());
             const isWaiting = item.dir === "in" && item.status === "waiting";
+            const inbound = item.dir === "in";
+            const count = Math.max(
+              1,
+              inbound ? (item.toMe ?? 1) : (item.fromMe ?? 1),
+            );
+            const photo = item.photo ?? rec?.photo ?? null;
             if (isWaiting) {
-              celebrate();
+              celebrate(count);
               if (item.serverId) {
                 void catchKiss({ data: item.serverId }).then(() => invalidateHome());
               }
@@ -319,19 +364,35 @@ function Home() {
             setQueue((q) => [
               {
                 from: item.name,
-                photo: item.photo ?? null,
+                photo,
                 first: isWaiting && received === 0,
-                count: Math.max(1, item.toMe ?? (item.dir === "in" ? 1 : 0)),
+                count,
                 skin: item.skin,
-                canReply: item.fromMe === 0,
+                canReply: inbound,
+                inbound,
               },
               ...q.filter((x) => x.from !== item.name),
             ]);
             setSendTarget({
               name: item.name,
-              tel: item.tel || "",
-              photo: item.photo ?? null,
+              tel: item.tel || rec?.tel || "",
+              photo,
             });
+            if (!photo) {
+              void searchDirectory({ data: { q: item.tel || item.name, myPhone: me.phone } }).then((rows) => {
+                const found = rows.find((p) => p.displayName.toLowerCase() === item.name.toLowerCase()) ?? rows[0];
+                if (!found?.photo) return;
+                setQueue((q) => q.map((x) => (x.from === item.name ? { ...x, photo: found.photo ?? null } : x)));
+                setMe((prev) => {
+                  const next = {
+                    ...prev,
+                    orbit: prev.orbit.map((k) => (k.name === item.name ? { ...k, photo: found.photo ?? k.photo } : k)),
+                  };
+                  saveMe(next);
+                  return next;
+                });
+              });
+            }
           }}
           onFace={(id, face) => {
             setMe((prev) => {
@@ -406,9 +467,18 @@ function Home() {
         </p>
         <RankBar kisses={sent} />
 
-        {(home.data?.people ?? []).length > 0 ? (
+        {(home.data?.people ?? []).filter((p) => {
+          const n = p.displayName.trim().toLowerCase();
+          return n.length > 1 && n !== "you" && n !== "someone" && n !== displayName.trim().toLowerCase();
+        }).length > 0 ? (
           <ul className="live-row">
-            {(home.data?.people ?? []).slice(0, 8).map((p) => (
+            {(home.data?.people ?? [])
+              .filter((p) => {
+                const n = p.displayName.trim().toLowerCase();
+                return n.length > 1 && n !== "you" && n !== "someone" && n !== displayName.trim().toLowerCase();
+              })
+              .slice(0, 8)
+              .map((p) => (
               <li key={p.userId}>
                 <button
                   type="button"
@@ -496,9 +566,12 @@ function Home() {
       <SendSheet
         open={sendOpen}
         myName={displayName}
+        myPhone={me.phone}
+        myPhoto={me.photo}
         signedIn={Boolean(liveUser)}
         mySent={sent}
         people={home.data?.people ?? []}
+        known={me.orbit.map((o) => ({ name: o.name, tel: o.tel, photo: o.photo }))}
         target={sendTarget}
         onClose={() => {
           setSendOpen(false);
@@ -537,6 +610,7 @@ function Home() {
           count={live.count}
           skin={live.skin}
           canReply={live.canReply !== false}
+          inbound={live.inbound !== false}
           more={queue.length > 1}
           onClose={nextLive}
           onReply={() => {
@@ -825,68 +899,32 @@ function PhoneGate({
   onDraftPhone: (v: string) => void;
   onReady: (phone: string) => void;
 }) {
-  const [step, setStep] = useState<"phone" | "code">("phone");
-  const [code, setCode] = useState("");
   const digits = phoneDigits(draftPhone);
-  const last4 = digits.slice(-4);
   const phoneReady = isValidPhone(draftPhone);
-  const codeReady = code.replace(/\D/g, "").length === 4;
   useKeyboardInset(true);
   return (
     <div className="sheet-scrim">
       <div className="sheet" role="dialog" aria-label="Your phone">
-        {step === "phone" ? (
-          <>
-            <p className="font-display text-2xl">Your number</p>
-            <p className="mt-1 text-sm text-muted">Confirm the phone people already have.</p>
-            <Input
-              className="mt-4"
-              value={draftPhone}
-              onChange={(e) => onDraftPhone(e.target.value)}
-              placeholder="Phone number"
-              type="tel"
-              name="phone"
-              inputMode="tel"
-              autoComplete="tel"
-            />
-            <Button
-              size="lg"
-              className="mt-4 w-full"
-              disabled={!phoneReady}
-              onClick={() => setStep("code")}
-            >
-              Confirm
-            </Button>
-          </>
-        ) : (
-          <>
-            <p className="font-display text-2xl">SMS code</p>
-            <p className="mt-1 text-sm text-muted">Enter the last 4 digits of {digits}.</p>
-            <Input
-              className="mt-4"
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
-              placeholder="••••"
-              type="tel"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-            />
-            <Button
-              size="lg"
-              className="mt-4 w-full"
-              disabled={!codeReady}
-              onClick={() => {
-                if (code !== last4) return;
-                onReady(digits);
-              }}
-            >
-              Confirm
-            </Button>
-            {codeReady && code !== last4 ? (
-              <p className="mt-2 text-sm text-primary">That code does not match.</p>
-            ) : null}
-          </>
-        )}
+        <p className="font-display text-2xl">Your number</p>
+        <p className="mt-1 text-sm text-muted">Confirm the phone people already have.</p>
+        <Input
+          className="mt-4"
+          value={draftPhone}
+          onChange={(e) => onDraftPhone(e.target.value)}
+          placeholder="Phone number"
+          type="tel"
+          name="phone"
+          inputMode="tel"
+          autoComplete="tel"
+        />
+        <Button
+          size="lg"
+          className="mt-4 w-full"
+          disabled={!phoneReady}
+          onClick={() => onReady(digits)}
+        >
+          Confirm
+        </Button>
       </div>
     </div>
   );

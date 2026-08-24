@@ -16,6 +16,8 @@ export type PublicPerson = {
   displayName: string;
   avatarHue: number;
   lastSeen?: string | null;
+  phone?: string | null;
+  photo?: string | null;
 };
 
 export type Friend = PublicPerson & {
