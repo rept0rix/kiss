@@ -1,5 +1,5 @@
 export function kissLine(_from?: string, _to?: string): string {
-  return "I kiss you now!\nCome inside and get it.";
+  return "Come get a kiss from me.";
 }
 
 export function sharePayload(from: string, to?: string, toPhone?: string): {
@@ -8,7 +8,7 @@ export function sharePayload(from: string, to?: string, toPhone?: string): {
   url?: string;
 } {
   const url = publicCatchUrl(cleanName(from), toPhone);
-  return { title: "I kiss you now", text: kissLine(), url };
+  return { title: "Come get a kiss from me", text: kissLine(), url };
 }
 
 export function shareBody(_from?: string, _to?: string, url?: string): string {

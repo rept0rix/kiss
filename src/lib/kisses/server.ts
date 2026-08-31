@@ -800,13 +800,47 @@ function mintCode(): string {
   return out;
 }
 
+async function findPhoto(
+  sql: Awaited<ReturnType<typeof getSql>>,
+  phone?: string | null,
+  name?: string | null,
+): Promise<string | null> {
+  const digits = (phone ?? "").replace(/\D/g, "");
+  if (digits.length >= 7) {
+    const rows = await sql<{ photo: string | null }>`
+      select photo from phone_book
+      where photo is not null and right(phone, 8) = ${digits.slice(-8)}
+      limit 1
+    `;
+    if (rows[0]?.photo) return rows[0].photo;
+  }
+  const who = (name ?? "").trim().toLowerCase();
+  if (who.length >= 2) {
+    const rows = await sql<{ photo: string | null }>`
+      select photo from phone_book
+      where photo is not null and lower(display_name) = ${who}
+      limit 1
+    `;
+    if (rows[0]?.photo) return rows[0].photo;
+    const like = `%${who}%`;
+    const fuzzy = await sql<{ photo: string | null }>`
+      select photo from phone_book
+      where photo is not null and lower(display_name) like ${like}
+      limit 1
+    `;
+    if (fuzzy[0]?.photo) return fuzzy[0].photo;
+  }
+  return null;
+}
+
 export const createShareLink = createServerFn({ method: "POST" })
   .validator((data: { fromName: string; toPhone?: string; fromPhone?: string; card?: string | null }) => data)
   .handler(async ({ data }): Promise<{ code: string }> => {
     const fromName = data.fromName.trim().slice(0, 32) || "Someone";
     const toPhone = (data.toPhone ?? "").replace(/\D/g, "").slice(0, 15) || null;
     const fromPhone = (data.fromPhone ?? "").replace(/\D/g, "").slice(0, 15) || null;
-    const card = (data.card ?? "").slice(0, 400000) || null;
+    const rawCard = data.card ?? "";
+    const card = rawCard.startsWith("data:image") ? rawCard.slice(0, 350000) : null;
     const sql = await getSql();
     for (let i = 0; i < 8; i += 1) {
       const code = mintCode();
@@ -815,34 +849,62 @@ export const createShareLink = createServerFn({ method: "POST" })
           insert into share_links (code, from_name, to_phone, from_phone, card)
           values (${code}, ${fromName}, ${toPhone}, ${fromPhone}, ${card})
         `;
-        return { code };
       } catch {
         try {
           await sql`
-            insert into share_links (code, from_name, to_phone)
-            values (${code}, ${fromName}, ${toPhone})
+            insert into share_links (code, from_name, to_phone, from_phone)
+            values (${code}, ${fromName}, ${toPhone}, ${fromPhone})
           `;
-          return { code };
         } catch {
-          /* retry */
+          try {
+            await sql`
+              insert into share_links (code, from_name, to_phone)
+              values (${code}, ${fromName}, ${toPhone})
+            `;
+          } catch {
+            continue;
+          }
         }
       }
+      if (card) {
+        try {
+          await sql`
+            insert into share_cards (code, body)
+            values (${code}, ${card})
+            on conflict (code) do update set body = excluded.body
+          `;
+        } catch {
+          /* share_cards may not exist yet */
+        }
+      }
+      return { code };
     }
     throw new Error("Could not make link");
   });
 
 export const resolveShareLink = createServerFn({ method: "GET" })
   .validator((code: string) => code)
-  .handler(async ({ data: raw }): Promise<{ fromName: string; toPhone: string | null; code: string } | null> => {
+  .handler(async ({ data: raw }): Promise<{ fromName: string; toPhone: string | null; code: string; fromPhoto: string | null } | null> => {
     const code = raw.trim().toLowerCase().slice(0, 8);
     if (!/^[a-z0-9]{4,8}$/.test(code)) return null;
     const sql = await getSql();
-    const rows = await sql<{ from_name: string; to_phone: string | null }>`
-      select from_name, to_phone from share_links where code = ${code}
-    `;
-    const row = rows[0];
+    let row: { from_name: string; to_phone: string | null; from_phone?: string | null } | undefined;
+    try {
+      row = (
+        await sql<{ from_name: string; to_phone: string | null; from_phone: string | null }>`
+          select from_name, to_phone, from_phone from share_links where code = ${code}
+        `
+      )[0];
+    } catch {
+      row = (
+        await sql<{ from_name: string; to_phone: string | null }>`
+          select from_name, to_phone from share_links where code = ${code}
+        `
+      )[0];
+    }
     if (!row) return null;
-    return { fromName: row.from_name, toPhone: row.to_phone, code };
+    const fromPhoto = await findPhoto(sql, row.from_phone ?? null, row.from_name);
+    return { fromName: row.from_name, toPhone: row.to_phone, code, fromPhoto };
   });
 
 export const getShareCard = createServerFn({ method: "GET" })
@@ -851,18 +913,25 @@ export const getShareCard = createServerFn({ method: "GET" })
     const code = raw.trim().toLowerCase().slice(0, 8);
     if (!/^[a-z0-9]{4,8}$/.test(code)) return null;
     const sql = await getSql();
-    const rows = await sql<{ card: string | null; from_phone: string | null; from_name: string }>`
-      select card, from_phone, from_name from share_links where code = ${code}
-    `;
-    const row = rows[0];
-    if (row?.card) return row.card;
-    if (row?.from_phone) {
-      const pics = await sql<{ photo: string | null }>`
-        select photo from phone_book where right(phone, 8) = ${row.from_phone.slice(-8)} limit 1
+    try {
+      const stored = await sql<{ body: string }>`
+        select body from share_cards where code = ${code} limit 1
       `;
-      if (pics[0]?.photo) return pics[0].photo;
+      if (stored[0]?.body?.startsWith("data:image")) return stored[0].body;
+    } catch {
+      /* table missing */
     }
-    return null;
+    try {
+      const rows = await sql<{ card: string | null; from_phone: string | null; from_name: string }>`
+        select card, from_phone, from_name from share_links where code = ${code}
+      `;
+      const row = rows[0];
+      if (row?.card?.startsWith("data:image")) return row.card;
+      const photo = await findPhoto(sql, row?.from_phone ?? null, row?.from_name ?? null);
+      return photo;
+    } catch {
+      return null;
+    }
   });
 
 function bookPerson(
@@ -888,7 +957,8 @@ export const registerPhone = createServerFn({ method: "POST" })
     const phone = normalizePhone(data.phone);
     if (phone.length < 8 || phone.length > 15) throw new Error("Need a real phone number");
     const name = (data.name ?? "").trim().slice(0, 32);
-    const photo = (data.photo ?? "").slice(0, 180000) || null;
+    const rawPhoto = data.photo ?? "";
+    const photo = rawPhoto.startsWith("data:image") ? rawPhoto.slice(0, 120000) : null;
     const sql = await getSql();
     await sql`
       insert into phone_book (phone, display_name, photo, last_seen)
@@ -910,9 +980,7 @@ export const searchDirectory = createServerFn({ method: "POST" })
     const raw = data.q.trim();
     const qName = raw.toLowerCase().replace(/[%_+]/g, " ").replace(/\s+/g, " ").trim();
     const digits = raw.replace(/\D/g, "");
-    const lookingPhone = digits.length >= 7;
-    const tail8 = lookingPhone ? digits.slice(-8) : "";
-    const tail7 = lookingPhone ? digits.slice(-7) : "";
+    const lookingPhone = digits.length >= 3;
     const mine = (data.myPhone ?? "").replace(/\D/g, "");
     const mineTail = mine.slice(-8);
     const sql = await getSql();
@@ -925,41 +993,67 @@ export const searchDirectory = createServerFn({ method: "POST" })
     let profiles: Array<Record<string, unknown>> = [];
     try {
       profiles = await sql.query(
-        "select phone, display_name, last_seen from profiles where phone is not null and phone <> '' limit 300",
+        "select user_id, phone, display_name, last_seen from profiles where coalesce(display_name,'') <> '' limit 400",
       );
     } catch {
       profiles = [];
     }
     const seen = new Set<string>();
     const out: PublicPerson[] = [];
+    const qTok = qName.split(/[\s.]+/).filter(Boolean);
+    function nameHit(name: string): boolean {
+      if (!qName) return true;
+      const n = name.toLowerCase();
+      if (n.includes(qName)) return true;
+      const nTok = n.split(/[\s.]+/).filter(Boolean);
+      return qTok.every((t) => nTok.some((nt) => nt.startsWith(t) || nt.includes(t)));
+    }
+    function phoneHit(phone: string): boolean {
+      if (!lookingPhone) return false;
+      const their = phone.replace(/\D/g, "");
+      if (!their) return false;
+      return their.includes(digits) || digits.includes(their.slice(-Math.min(8, their.length)));
+    }
     for (const r of [...book, ...profiles]) {
       const phoneRaw = String(r.phone ?? "");
-      if (!phoneRaw) continue;
-      const phone = normalizePhone(phoneRaw);
-      const key = phone.replace(/\D/g, "").slice(-8);
-      if (key.length < 7 || seen.has(key)) continue;
-      if (mineTail.length >= 7 && key === mineTail) continue;
+      const phone = phoneRaw ? normalizePhone(phoneRaw) : "";
       const name = String(r.display_name ?? "").trim();
       if (/^you$|^someone$/i.test(name)) continue;
-      if (lookingPhone) {
-        const their = phone.replace(/\D/g, "");
-        const hit =
-          their.slice(-8) === tail8 ||
-          their.slice(-7) === tail7 ||
-          digits.slice(-8) === their.slice(-8) ||
-          their.endsWith(digits) ||
-          digits.endsWith(their.slice(-9));
-        if (!hit) continue;
-      } else if (qName.length > 0) {
-        if (!name.toLowerCase().includes(qName) && !qName.split(" ").every((p) => p && name.toLowerCase().includes(p))) {
-          continue;
-        }
+      const key = phone.replace(/\D/g, "").slice(-8) || `n:${name.toLowerCase()}`;
+      if (seen.has(key)) continue;
+      if (mineTail.length >= 7 && key === mineTail) continue;
+      if (qName || lookingPhone) {
+        if (!(name && nameHit(name)) && !phoneHit(phone)) continue;
       }
+      if (!name && !phone) continue;
       seen.add(key);
-      const photo = typeof r.photo === "string" && r.photo.startsWith("data:") ? r.photo : null;
-      out.push(bookPerson(phone, name || phone, r.last_seen ? String(r.last_seen) : null, photo));
+      const wantPhoto = qName.length >= 2 || lookingPhone;
+      const photo =
+        wantPhoto && typeof r.photo === "string" && r.photo.startsWith("data:") ? r.photo : null;
+      const uid = typeof r.user_id === "string" ? r.user_id : `p:${phone || name}`;
+      out.push({
+        userId: uid,
+        handle: phone.slice(-4) || name.slice(0, 4),
+        displayName: name || phone,
+        avatarHue: Math.abs(hashCode(phone || name)) % 360,
+        lastSeen: r.last_seen ? String(r.last_seen) : null,
+        phone: phone || undefined,
+        photo,
+      });
     }
-    return out.slice(0, 40);
+    if (mineTail.length >= 7) {
+      try {
+        const blocked = await sql<{ blocked_phone: string }>`
+          select blocked_phone from phone_blocks
+          where right(blocker_phone, 8) = ${mineTail}
+        `;
+        const hide = new Set(blocked.map((b) => b.blocked_phone.replace(/\D/g, "").slice(-8)));
+        return out.filter((p) => !hide.has((p.phone ?? "").replace(/\D/g, "").slice(-8))).slice(0, 50);
+      } catch {
+        /* table missing */
+      }
+    }
+    return out.slice(0, 50);
   });
 
 export const sendPhoneKiss = createServerFn({ method: "POST" })
@@ -990,6 +1084,15 @@ export const sendPhoneKiss = createServerFn({ method: "POST" })
     const hit = target[0] ?? fromProfiles[0];
     if (!hit) throw new Error("They are not on KISS yet");
     const to = normalizePhone(hit.phone);
+    const blocked = await sql<{ n: number }>`
+      select 1 as n from phone_blocks
+      where right(blocker_phone, 8) = ${to.slice(-8)}
+        and right(blocked_phone, 8) = ${fromPhone.slice(-8)}
+      limit 1
+    `.catch(() => [] as Array<{ n: number }>);
+    if (blocked.length > 0) {
+      return { id: 0, count: n, toName: hit.display_name || to, toPhone: to };
+    }
     const inserted = await sql<{ id: number }>`
       insert into phone_kisses (from_phone, from_name, to_phone, kind, n)
       values (${fromPhone}, ${fromName}, ${to}, ${kind}, ${n})
@@ -1021,22 +1124,40 @@ export const phoneInbox = createServerFn({ method: "POST" })
       kind: string;
       n: number;
       created_at: string;
+      photo: string | null;
     }>`
-      select id, from_phone, from_name, kind, n, created_at::text as created_at
-      from phone_kisses
-      where (to_phone = ${phone} or right(to_phone, 8) = ${phone.slice(-8)})
-        and caught_at is null
-      order by created_at desc
+      select pk.id, pk.from_phone, pk.from_name, pk.kind, pk.n, pk.created_at::text as created_at,
+        (
+          select photo from phone_book
+          where photo is not null and right(phone, 8) = right(pk.from_phone, 8)
+          limit 1
+        ) as photo
+      from phone_kisses pk
+      where (pk.to_phone = ${phone} or right(pk.to_phone, 8) = ${phone.slice(-8)})
+        and pk.caught_at is null
+      order by pk.created_at desc
       limit 30
     `;
-    return rows.map((r) => ({
+    const mapped = rows.map((r) => ({
       id: Number(r.id),
       fromPhone: r.from_phone,
       fromName: r.from_name,
       kind: r.kind,
       count: Number(r.n) || 1,
       createdAt: r.created_at,
+      photo: r.photo && r.photo.startsWith("data:") ? r.photo : null,
     }));
+    let hide = new Set<string>();
+    try {
+      const blocked = await sql<{ blocked_phone: string }>`
+        select blocked_phone from phone_blocks
+        where right(blocker_phone, 8) = ${phone.slice(-8)}
+      `;
+      hide = new Set(blocked.map((b) => b.blocked_phone.replace(/\D/g, "").slice(-8)));
+    } catch {
+      hide = new Set();
+    }
+    return mapped.filter((r) => !hide.has(r.fromPhone.replace(/\D/g, "").slice(-8)));
   });
 
 export const catchPhoneKiss = createServerFn({ method: "POST" })
@@ -1046,3 +1167,191 @@ export const catchPhoneKiss = createServerFn({ method: "POST" })
     await sql`update phone_kisses set caught_at = now() where id = ${id} and caught_at is null`;
     return { ok: true as const };
   });
+
+export type StreamKiss = {
+  id: string;
+  from: string;
+  to: string;
+  count: number;
+  kind: string;
+  at: string;
+};
+
+function shortName(raw: string): string {
+  const n = raw.trim().replace(/\s+/g, " ");
+  if (!n || /^someone$|^you$/i.test(n)) return "Someone";
+  const parts = n.split(" ");
+  if (parts.length === 1) return parts[0]!.slice(0, 16);
+  return `${parts[0]} ${parts[1]![0]}.`.slice(0, 18);
+}
+
+export const kissStream = createServerFn({ method: "GET" }).handler(async (): Promise<StreamKiss[]> => {
+  const sql = await getSql();
+  const phoneRows = await sql<{
+    id: number;
+    from_name: string;
+    to_name: string | null;
+    n: number;
+    kind: string;
+    created_at: string;
+  }>`
+    select
+      pk.id,
+      pk.from_name,
+      (
+        select display_name from phone_book
+        where right(phone, 8) = right(pk.to_phone, 8)
+        limit 1
+      ) as to_name,
+      pk.n,
+      pk.kind,
+      pk.created_at::text as created_at
+    from phone_kisses pk
+    order by pk.created_at desc
+    limit 80
+  `;
+  let logged: Array<{
+    id: number;
+    from_name: string;
+    to_name: string;
+    kind: string;
+    created_at: string;
+  }> = [];
+  try {
+    logged = await sql`
+      select k.id, fp.display_name as from_name, tp.display_name as to_name, k.kind, k.created_at::text as created_at
+      from kisses k
+      join profiles fp on fp.user_id = k.from_user_id
+      join profiles tp on tp.user_id = k.to_user_id
+      order by k.created_at desc
+      limit 40
+    `;
+  } catch {
+    logged = [];
+  }
+  const out: StreamKiss[] = [
+    ...phoneRows.map((r) => ({
+      id: `p${r.id}`,
+      from: shortName(r.from_name),
+      to: shortName(r.to_name || "Someone"),
+      count: Number(r.n) || 1,
+      kind: r.kind,
+      at: r.created_at,
+    })),
+    ...logged.map((r) => ({
+      id: `u${r.id}`,
+      from: shortName(r.from_name),
+      to: shortName(r.to_name),
+      count: 1,
+      kind: r.kind,
+      at: r.created_at,
+    })),
+  ];
+  out.sort((a, b) => (a.at < b.at ? 1 : -1));
+  return out.slice(0, 80);
+});
+
+export const lookupFace = createServerFn({ method: "POST" })
+  .validator((data: { name?: string; phone?: string }) => data)
+  .handler(async ({ data }) => {
+    const sql = await getSql();
+    const photo = await findPhoto(sql, data.phone ?? null, data.name ?? null);
+    let name = "";
+    const digits = (data.phone ?? "").replace(/\D/g, "");
+    if (digits.length >= 7) {
+      const rows = await sql<{ display_name: string }>`
+        select display_name from phone_book
+        where right(phone, 8) = ${digits.slice(-8)}
+        limit 1
+      `.catch(() => []);
+      name = rows[0]?.display_name?.trim() || "";
+    }
+    return { photo, name, exists: Boolean(name || photo) };
+  });
+
+export const blockPhone = createServerFn({ method: "POST" })
+  .validator((data: { myPhone: string; theirPhone?: string; theirName?: string }) => data)
+  .handler(async ({ data }) => {
+    const me = normalizePhone(data.myPhone);
+    const them = normalizePhone(data.theirPhone ?? "");
+    if (me.length < 8 || them.length < 8) return { ok: true as const };
+    if (me.slice(-8) === them.slice(-8)) return { ok: true as const };
+    const name = (data.theirName ?? "").trim().slice(0, 32);
+    const sql = await getSql();
+    await sql`
+      insert into phone_blocks (blocker_phone, blocked_phone, blocked_name)
+      values (${me}, ${them}, ${name})
+      on conflict do nothing
+    `;
+    return { ok: true as const };
+  });
+
+export const unblockPhone = createServerFn({ method: "POST" })
+  .validator((data: { myPhone: string; theirPhone: string }) => data)
+  .handler(async ({ data }) => {
+    const me = normalizePhone(data.myPhone);
+    const them = normalizePhone(data.theirPhone);
+    if (me.length < 8 || them.length < 8) return { ok: true as const };
+    const sql = await getSql();
+    await sql`
+      delete from phone_blocks
+      where right(blocker_phone, 8) = ${me.slice(-8)}
+        and right(blocked_phone, 8) = ${them.slice(-8)}
+    `;
+    return { ok: true as const };
+  });
+
+export const listBlocks = createServerFn({ method: "POST" })
+  .validator((myPhone: string) => myPhone)
+  .handler(async ({ data: raw }) => {
+    const me = normalizePhone(raw);
+    if (me.length < 8) return [];
+    const sql = await getSql();
+    try {
+      const rows = await sql<{ blocked_phone: string; blocked_name: string }>`
+        select blocked_phone, blocked_name from phone_blocks
+        where right(blocker_phone, 8) = ${me.slice(-8)}
+        order by created_at desc
+      `;
+      return rows.map((r) => ({ tel: r.blocked_phone, name: r.blocked_name || r.blocked_phone }));
+    } catch {
+      return [];
+    }
+  });
+
+export const saveNick = createServerFn({ method: "POST" })
+  .validator((data: { myPhone: string; myName?: string; theirPhone: string; nick: string }) => data)
+  .handler(async ({ data }) => {
+    const me = normalizePhone(data.myPhone);
+    const them = normalizePhone(data.theirPhone);
+    const nick = data.nick.trim().slice(0, 24);
+    if (me.length < 8 || them.length < 8 || !nick) return { ok: true as const };
+    const sql = await getSql();
+    await sql`
+      insert into phone_nicks (owner_phone, target_phone, nick, owner_name)
+      values (${me}, ${them}, ${nick}, ${(data.myName ?? "").slice(0, 32)})
+      on conflict (owner_phone, target_phone) do update set nick = excluded.nick, owner_name = excluded.owner_name
+    `;
+    return { ok: true as const };
+  });
+
+export const listNicks = createServerFn({ method: "POST" })
+  .validator((myPhone: string) => myPhone)
+  .handler(async ({ data: raw }): Promise<Array<{ from: string; nick: string }>> => {
+    const me = normalizePhone(raw);
+    if (me.length < 8) return [];
+    const sql = await getSql();
+    try {
+      const rows = await sql<{ owner_name: string; nick: string }>`
+        select owner_name, nick from phone_nicks
+        where right(target_phone, 8) = ${me.slice(-8)}
+        order by created_at desc
+        limit 24
+      `;
+      return rows.map((r) => ({ from: r.owner_name || "Someone", nick: r.nick }));
+    } catch {
+      return [];
+    }
+  });
+
+

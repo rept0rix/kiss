@@ -4,7 +4,7 @@ import { ConfettiBurst } from "./confetti-burst";
 import { HeartMark } from "./heart-mark";
 import { KissSkin } from "./kiss-skin";
 import { LipsMark } from "./lips-mark";
-import { playCelebrate, unlockSound } from "@/lib/sound";
+import { playKiss, playSuper, unlockSound } from "@/lib/sound";
 
 export function LiveKiss({
   from,
@@ -15,9 +15,12 @@ export function LiveKiss({
   canReply,
   more,
   inbound = true,
+  superMs = 0,
   onClose,
   onReply,
   onFlood,
+  onSuper,
+  onBlock,
 }: {
   from: string;
   photo?: string | null;
@@ -27,9 +30,12 @@ export function LiveKiss({
   canReply?: boolean;
   more?: boolean;
   inbound?: boolean;
+  superMs?: number;
   onClose: () => void;
   onReply: () => void;
   onFlood?: () => void;
+  onSuper?: () => void;
+  onBlock?: () => void;
 }) {
   const n = Math.max(1, count);
   const rain = useMemo(
@@ -48,8 +54,8 @@ export function LiveKiss({
 
   useEffect(() => {
     unlockSound();
-    playCelebrate(Math.min(n, 10));
-  }, [from, n]);
+    playKiss();
+  }, [from]);
 
   return (
     <div className="live-kiss" role="dialog" aria-label={`${from} loves you`}>
@@ -108,6 +114,15 @@ export function LiveKiss({
             Kiss back
           </button>
         ) : null}
+        {canReply !== false && onSuper && superMs > 0 ? (
+          <button type="button" className="live-super" onClick={() => { playSuper(); onSuper(); }}>
+            Super kiss · {Math.ceil(superMs / 1000)}s
+          </button>
+        ) : canReply !== false && onSuper ? (
+          <button type="button" className="live-super" onClick={() => { playSuper(); onSuper(); }}>
+            Super kiss
+          </button>
+        ) : null}
         {canReply !== false && onFlood ? (
           <button type="button" className="live-flood" onClick={onFlood}>
             Flood ×21
@@ -116,6 +131,11 @@ export function LiveKiss({
         <button type="button" className="live-skip" onClick={onClose}>
           {more ? "Next kiss" : "Close"}
         </button>
+        {onBlock ? (
+          <button type="button" className="live-block" onClick={onBlock}>
+            Block · they won't know
+          </button>
+        ) : null}
       </div>
     </div>
   );

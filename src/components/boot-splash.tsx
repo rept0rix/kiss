@@ -11,8 +11,8 @@ export function BootSplash({ onReady }: { onReady: () => void }) {
     const start = Date.now();
     const id = window.setInterval(() => {
       const t = Date.now() - start;
-      if (t >= 280) setDark(true);
-      const next = Math.min(100, 12 + (t / 700) * 88);
+      if (t >= 140) setDark(true);
+      const next = Math.min(100, 12 + (t / 380) * 88);
       setPct(next);
       if (next >= 100 && !done.current) {
         done.current = true;
@@ -24,7 +24,7 @@ export function BootSplash({ onReady }: { onReady: () => void }) {
       done.current = true;
       setPct(100);
       onReady();
-    }, 900);
+    }, 450);
     return () => {
       window.clearInterval(id);
       window.clearTimeout(fail);
@@ -38,8 +38,8 @@ export function BootSplash({ onReady }: { onReady: () => void }) {
         ? Array.from({ length: 8 }, (_, i) => (
             <HeartMark key={i} className={`boot-bit boot-heart boot-h-${i + 1}`} />
           ))
-        : Array.from({ length: 8 }, (_, i) => (
-            <LipsMark key={i} className={`boot-bit boot-kiss boot-k-${i + 1}`} />
+        : Array.from({ length: 14 }, (_, i) => (
+            <LipsMark key={i} i={i} className={`boot-bit boot-kiss boot-k-${(i % 8) + 1}`} />
           ))}
       <p className="boot-word">KISS</p>
       <div className="boot-meter">

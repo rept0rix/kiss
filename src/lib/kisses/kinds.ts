@@ -9,7 +9,7 @@ export const KISS_KINDS = [
 export type KissKindId = (typeof KISS_KINDS)[number]["id"] | string;
 
 export function isKissKind(value: string): boolean {
-  return KISS_KINDS.some((k) => k.id === value) || isSkin(value) || value === "random";
+  return KISS_KINDS.some((k) => k.id === value) || isSkin(value) || value === "random" || value === "super";
 }
 
 export function kindLabel(id: string): string {

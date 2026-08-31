@@ -76,16 +76,36 @@ export function saveMe(next: MeState): void {
     /* ignore */
   }
   try {
-    window.localStorage.setItem(KEY, JSON.stringify(next));
+    const slim: MeState = {
+      ...next,
+      photo: next.photo,
+      orbit: next.orbit.slice(0, 12).map((o) => ({
+        ...o,
+        photo: o.photo && o.photo.length > 12000 ? null : o.photo,
+      })),
+    };
+    window.localStorage.setItem(KEY, JSON.stringify(slim));
   } catch {
     try {
       const slim: MeState = {
         ...next,
-        orbit: next.orbit.map((o) => ({ ...o, photo: null })),
+        photo: next.photo,
+        orbit: next.orbit.slice(0, 8).map((o) => ({ ...o, photo: null })),
       };
       window.localStorage.setItem(KEY, JSON.stringify(slim));
     } catch {
-      /* identity is enough to stay signed in */
+      try {
+        window.localStorage.setItem(ID_KEY, JSON.stringify({
+          entered: next.entered,
+          name: next.name,
+          phone: next.phone,
+          sent: next.sent,
+          received: next.received,
+          lastInboxId: next.lastInboxId,
+        }));
+      } catch {
+        /* stay in memory */
+      }
     }
   }
 }
@@ -96,7 +116,7 @@ export function cropPhoto(file: File): Promise<string> {
     const url = URL.createObjectURL(file);
     img.onload = () => {
       const canvas = document.createElement("canvas");
-      const size = 480;
+      const size = 280;
       canvas.width = size;
       canvas.height = size;
       const ctx = canvas.getContext("2d");
@@ -110,7 +130,7 @@ export function cropPhoto(file: File): Promise<string> {
       const sy = (img.height - s) / 2;
       ctx.drawImage(img, sx, sy, s, s, 0, 0, size, size);
       URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL("image/jpeg", 0.82));
+      resolve(canvas.toDataURL("image/jpeg", 0.7));
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);

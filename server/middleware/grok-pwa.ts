@@ -97,7 +97,6 @@ export default async function grokPwaMiddleware(
   }
 
   if (!isDocumentPath(path)) return next();
-  if (path.startsWith("/k/")) return next();
 
   const result = await next();
   if (

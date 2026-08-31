@@ -9,6 +9,7 @@ import {
   rememberContact,
   smsHref,
 } from "@/lib/contacts";
+import { loadGroups, upsertGroup, type KissGroup } from "@/lib/groups";
 import { rankAt } from "@/lib/kisses/ranks";
 import { createShareLink, searchDirectory, sendPhoneKiss } from "@/lib/kisses/server";
 import type { PublicPerson } from "@/lib/kisses/types";
@@ -86,6 +87,8 @@ export function SendSheet({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hits, setHits] = useState<PublicPerson[]>([]);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [groups, setGroups] = useState<KissGroup[]>(() => loadGroups());
   const [inviteText, setInviteText] = useState("");
   const picker = canPickContacts();
   useKeyboardInset(open);
@@ -113,9 +116,36 @@ export function SendSheet({
     const q = query.trim();
     const handle = window.setTimeout(() => {
       void searchDirectory({ data: { q, myPhone } })
-        .then((rows) => setHits(blendHits(rows, known)))
+        .then((rows) => {
+          const local = [...(known ?? []), ...loadRecents()]
+            .filter((k) => {
+              const n = k.name.toLowerCase();
+              const d = (k.tel ?? "").replace(/\D/g, "");
+              if (!q) return true;
+              return n.includes(q.toLowerCase()) || (q.replace(/\D/g, "").length >= 3 && d.includes(q.replace(/\D/g, "")));
+            })
+            .map((k) => ({
+              userId: `local:${k.tel || k.name}`,
+              handle: (k.tel ?? "").slice(-4),
+              displayName: k.name,
+              avatarHue: 12,
+              lastSeen: null,
+              phone: k.tel,
+              photo: k.photo ?? null,
+            }));
+          const merged = blendHits([...local, ...rows], known);
+          const seen = new Set<string>();
+          setHits(
+            merged.filter((p) => {
+              const key = (p.phone ?? "").slice(-8) || p.displayName.toLowerCase();
+              if (seen.has(key)) return false;
+              seen.add(key);
+              return true;
+            }),
+          );
+        })
         .catch(() => undefined);
-    }, 160);
+    }, 90);
     return () => window.clearTimeout(handle);
   }, [query, myPhone, open]);
 
@@ -144,12 +174,17 @@ export function SendSheet({
 
   const hasPhone = isValidPhone(tel);
   const mine = myName.trim().toLowerCase();
+  const myTail = myPhone.replace(/\D/g, "").slice(-8);
+  const seenHits = new Set<string>();
   const shown = hits.filter((p) => {
     const n = (p.displayName || "").trim().toLowerCase();
-    const myTail = myPhone.replace(/\D/g, "").slice(-8);
-    if (p.phone && myTail && p.phone.slice(-8) === myTail) return false;
-    return n !== "you" && n !== "someone" && n !== mine;
-  });
+    if (p.phone && myTail && p.phone.replace(/\D/g, "").slice(-8) === myTail) return false;
+    if (n === "you" || n === "someone" || n === mine) return false;
+    const key = (p.phone ?? "").replace(/\D/g, "").slice(-8) || n;
+    if (seenHits.has(key)) return false;
+    seenHits.add(key);
+    return true;
+  }).map((p) => (p.photo && myPhoto && p.photo === myPhoto ? { ...p, photo: null } : p));
   const onApp = shown.length > 0;
 
   function finishInApp(toName: string, userId?: string, count = 1, phone?: string) {
@@ -238,18 +273,73 @@ export function SendSheet({
             setError(null);
             if (isValidPhone(v)) setTel(v);
           }}
-          placeholder="Name or phone"
+          placeholder="Name or phone — type to find"
           autoComplete="off"
+          autoCorrect="off"
         />
+
+        {groups.length > 0 ? (
+          <ul className="group-row mt-2">
+            {groups.map((g) => (
+              <li key={g.id}>
+                <button
+                  type="button"
+                  className="group-chip"
+                  disabled={busy}
+                  onClick={() => {
+                    setBusy(true);
+                    void (async () => {
+                      for (const m of g.members) {
+                        if (!m.tel && !m.userId) continue;
+                        try {
+                          if (m.tel) {
+                            await sendPhoneKiss({
+                              data: {
+                                fromPhone: myPhone,
+                                fromName: myName,
+                                toPhone: m.tel,
+                                count: 1,
+                                kind: rankAt(mySent).skin,
+                              },
+                            });
+                          }
+                        } catch {
+                          /* skip missing */
+                        }
+                      }
+                      onSent({ name: g.name, status: "waiting", count: g.members.length });
+                      onClose();
+                    })().finally(() => setBusy(false));
+                  }}
+                >
+                  {g.name} · {g.members.length}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
 
         {shown.length > 0 ? (
           <ul className="hit-list mt-2">
             {shown.map((hit) => (
               <li key={hit.userId} className="hit">
+                <button
+                  type="button"
+                  className={`hit-check ${picked.has(hit.userId) ? "is-on" : ""}`}
+                  onClick={() => {
+                    setPicked((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(hit.userId)) next.delete(hit.userId);
+                      else next.add(hit.userId);
+                      return next;
+                    });
+                  }}
+                  aria-label="Select for group"
+                />
                 <Face name={hit.displayName} photo={hit.photo} className="hit-face" />
                 <span className="hit-copy">
                   <span className="hit-name">{hit.displayName}</span>
-                  <span className="hit-meta">on KISS</span>
+                  <span className="hit-meta">{hit.phone ? "on KISS" : "saved"}</span>
                 </span>
                 <Button
                   size="sm"
@@ -268,7 +358,54 @@ export function SendSheet({
           </p>
         )}
 
-        {error ? <p className="mt-2 text-sm text-primary">{error}</p> : null}
+        {picked.size >= 2 ? (
+          <div className="group-actions">
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() => {
+                const members = shown.filter((h) => picked.has(h.userId));
+                setBusy(true);
+                void (async () => {
+                  for (const m of members) {
+                    if (!m.phone) continue;
+                    try {
+                      await sendPhoneKiss({
+                        data: {
+                          fromPhone: myPhone,
+                          fromName: myName,
+                          toPhone: m.phone,
+                          count: 1,
+                          kind: rankAt(mySent).skin,
+                        },
+                      });
+                    } catch {
+                      /* skip */
+                    }
+                  }
+                  onSent({ name: `${members.length} people`, status: "waiting", count: members.length });
+                  onClose();
+                })().finally(() => setBusy(false));
+              }}
+            >
+              Kiss {picked.size}
+            </Button>
+            <button
+              type="button"
+              className="invite-toggle"
+              onClick={() => {
+                const members = shown
+                  .filter((h) => picked.has(h.userId))
+                  .map((h) => ({ name: h.displayName, tel: h.phone ?? undefined, userId: h.userId, photo: h.photo }));
+                const name = members.map((m) => m.name.split(" ")[0]).slice(0, 3).join(" · ");
+                setGroups(upsertGroup({ id: `g-${Date.now()}`, name: name || "Group", members }));
+                setPicked(new Set());
+              }}
+            >
+              Save group
+            </button>
+          </div>
+        ) : null}
 
         {!onApp ? (
           <>

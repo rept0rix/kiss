@@ -84,4 +84,7 @@ export type OrbitItem = {
   fromMe?: number;
   skin?: string;
   userId?: string;
+  realName?: string;
+  lastIn?: number;
+  lastOut?: number;
 };

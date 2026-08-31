@@ -1,14 +1,20 @@
 const KEY = "kiss-sound-v1";
+const SAMPLES = ["/sounds/kiss-1.mp3", "/sounds/kiss-2.mp3", "/sounds/kiss-3.mp3", "/sounds/kiss-4.mp3"];
+const SUPER_SAMPLE = "/sounds/kiss-super.mp3";
 
 type SoundPrefs = {
   kisses: boolean;
   hearts: boolean;
+  music: boolean;
 };
 
-const DEFAULT: SoundPrefs = { kisses: true, hearts: true };
+const DEFAULT: SoundPrefs = { kisses: true, hearts: true, music: true };
 
 let prefs: SoundPrefs = loadPrefs();
 let ctx: AudioContext | null = null;
+const buffers = new Map<string, AudioBuffer>();
+let sampleI = 0;
+let bed: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
 
 function loadPrefs(): SoundPrefs {
   if (typeof window === "undefined") return { ...DEFAULT };
@@ -19,6 +25,7 @@ function loadPrefs(): SoundPrefs {
     return {
       kisses: parsed.kisses !== false,
       hearts: parsed.hearts !== false,
+      music: parsed.music !== false,
     };
   } catch {
     return { ...DEFAULT };
@@ -36,11 +43,13 @@ export function setSoundPrefs(next: Partial<SoundPrefs>): SoundPrefs {
   } catch {
     /* ignore */
   }
+  if (prefs.music) startMusic();
+  else stopMusic();
   return getSoundPrefs();
 }
 
 export function soundsOn(): boolean {
-  return prefs.kisses || prefs.hearts;
+  return prefs.kisses || prefs.hearts || prefs.music;
 }
 
 function audio(): AudioContext | null {
@@ -52,53 +61,96 @@ function audio(): AudioContext | null {
   return ctx;
 }
 
-export function unlockSound(): void {
-  audio();
+async function loadBuffer(src: string): Promise<AudioBuffer | null> {
+  const ac = audio();
+  if (!ac) return null;
+  const hit = buffers.get(src);
+  if (hit) return hit;
+  try {
+    const res = await fetch(src);
+    const raw = await res.arrayBuffer();
+    const buf = await ac.decodeAudioData(raw.slice(0));
+    buffers.set(src, buf);
+    return buf;
+  } catch {
+    return null;
+  }
 }
 
-function noise(ac: AudioContext, duration: number): AudioBufferSourceNode {
-  const n = Math.max(1, Math.floor(ac.sampleRate * duration));
-  const buffer = ac.createBuffer(1, n, ac.sampleRate);
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < n; i += 1) data[i] = Math.random() * 2 - 1;
+function playBuffer(buf: AudioBuffer, gain = 0.85): void {
+  const ac = audio();
+  if (!ac) return;
   const src = ac.createBufferSource();
-  src.buffer = buffer;
-  return src;
+  src.buffer = buf;
+  const g = ac.createGain();
+  g.gain.value = gain;
+  src.connect(g);
+  g.connect(ac.destination);
+  src.start();
 }
+
+export function unlockSound(): void {
+  audio();
+  for (const src of [...SAMPLES, SUPER_SAMPLE, "/sounds/bed.mp3"]) void loadBuffer(src);
+}
+
+export function startMusic(): void {
+  if (!prefs.music) return;
+  const ac = audio();
+  if (!ac || bed) return;
+  void loadBuffer("/sounds/bed.mp3").then((buf) => {
+    if (!buf || bed || !prefs.music) return;
+    const src = ac.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    const g = ac.createGain();
+    g.gain.value = 0.045;
+    src.connect(g);
+    g.connect(ac.destination);
+    src.start();
+    bed = { src, gain: g };
+  });
+}
+
+export function stopMusic(): void {
+  if (!bed) return;
+  try {
+    bed.src.stop();
+  } catch {
+    /* ignore */
+  }
+  bed = null;
+}
+
+let lastKissAt = 0;
 
 export function playKiss(): void {
   if (!prefs.kisses) return;
-  const ac = audio();
-  if (!ac) return;
-  const t = ac.currentTime;
-  const src = noise(ac, 0.22);
-  const filter = ac.createBiquadFilter();
-  filter.type = "bandpass";
-  filter.frequency.setValueAtTime(900, t);
-  filter.frequency.exponentialRampToValueAtTime(420, t + 0.18);
-  filter.Q.value = 4;
-  const gain = ac.createGain();
-  gain.gain.setValueAtTime(0.0001, t);
-  gain.gain.exponentialRampToValueAtTime(0.28, t + 0.02);
-  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
-  src.connect(filter);
-  filter.connect(gain);
-  gain.connect(ac.destination);
-  src.start(t);
-  src.stop(t + 0.22);
+  const now = Date.now();
+  if (now - lastKissAt < 1400) return;
+  lastKissAt = now;
+  const src = SAMPLES[sampleI % SAMPLES.length] ?? SAMPLES[0];
+  sampleI += 1;
+  const buf = buffers.get(src);
+  if (buf) {
+    playBuffer(buf, 0.7);
+    return;
+  }
+  void loadBuffer(src).then((b) => {
+    if (b) playBuffer(b, 0.7);
+  });
+}
 
-  const osc = ac.createOscillator();
-  const og = ac.createGain();
-  osc.type = "sine";
-  osc.frequency.setValueAtTime(520, t);
-  osc.frequency.exponentialRampToValueAtTime(180, t + 0.16);
-  og.gain.setValueAtTime(0.0001, t);
-  og.gain.exponentialRampToValueAtTime(0.09, t + 0.015);
-  og.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
-  osc.connect(og);
-  og.connect(ac.destination);
-  osc.start(t);
-  osc.stop(t + 0.2);
+export function playSuper(): void {
+  if (!prefs.kisses) return;
+  const buf = buffers.get(SUPER_SAMPLE);
+  if (buf) {
+    playBuffer(buf, 1);
+    return;
+  }
+  void loadBuffer(SUPER_SAMPLE).then((b) => {
+    if (b) playBuffer(b, 1);
+  });
 }
 
 export function playHeart(): void {
@@ -118,28 +170,8 @@ export function playHeart(): void {
   gain.connect(ac.destination);
   osc.start(t);
   osc.stop(t + 0.24);
-
-  const osc2 = ac.createOscillator();
-  const g2 = ac.createGain();
-  osc2.type = "sine";
-  osc2.frequency.value = 1760;
-  g2.gain.setValueAtTime(0.0001, t);
-  g2.gain.exponentialRampToValueAtTime(0.05, t + 0.01);
-  g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
-  osc2.connect(g2);
-  g2.connect(ac.destination);
-  osc2.start(t);
-  osc2.stop(t + 0.14);
 }
 
-export function playCelebrate(count = 1): void {
-  const n = Math.min(12, Math.max(1, count));
+export function playCelebrate(_count = 1): void {
   playKiss();
-  window.setTimeout(() => playHeart(), 90);
-  for (let i = 1; i < n; i += 1) {
-    window.setTimeout(() => {
-      if (i % 2 === 0) playKiss();
-      else playHeart();
-    }, 70 * i);
-  }
 }

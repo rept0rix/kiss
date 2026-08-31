@@ -46,12 +46,6 @@ export async function pickFromPhone(): Promise<PhoneContact[]> {
   return out;
 }
 
-export function faceTemplate(name: string): string {
-  const n = nameHue(name || "x");
-  const i = (n % 10) + 1;
-  return `/faces/face-${String(i).padStart(2, "0")}.jpg`;
-}
-
 export function nameHue(name: string): number {
   let n = 0;
   for (let i = 0; i < name.length; i++) n = (n + name.charCodeAt(i) * (i + 3)) % 360;
@@ -66,13 +60,44 @@ export function initials(name: string): string {
 }
 
 export function tinyPhoto(blob: Blob): Promise<string | null> {
+  return blobToThumb(blob, 96, 0.72);
+}
+
+export function shrinkDataUrl(src: string, size = 160): Promise<string> {
+  return new Promise((resolve) => {
+    if (!src.startsWith("data:image")) {
+      resolve(src);
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(src);
+        return;
+      }
+      const s = Math.min(img.width, img.height);
+      const sx = (img.width - s) / 2;
+      const sy = (img.height - s) / 2;
+      ctx.drawImage(img, sx, sy, s, s, 0, 0, size, size);
+      resolve(canvas.toDataURL("image/jpeg", 0.62));
+    };
+    img.onerror = () => resolve(src);
+    img.src = src;
+  });
+}
+
+function blobToThumb(blob: Blob, size: number, quality: number): Promise<string | null> {
   return new Promise((resolve) => {
     const img = new Image();
     const url = URL.createObjectURL(blob);
     img.onload = () => {
       const canvas = document.createElement("canvas");
-      canvas.width = 96;
-      canvas.height = 96;
+      canvas.width = size;
+      canvas.height = size;
       const ctx = canvas.getContext("2d");
       if (!ctx) {
         URL.revokeObjectURL(url);
@@ -82,9 +107,9 @@ export function tinyPhoto(blob: Blob): Promise<string | null> {
       const s = Math.min(img.width, img.height);
       const sx = (img.width - s) / 2;
       const sy = (img.height - s) / 2;
-      ctx.drawImage(img, sx, sy, s, s, 0, 0, 96, 96);
+      ctx.drawImage(img, sx, sy, s, s, 0, 0, size, size);
       URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL("image/jpeg", 0.72));
+      resolve(canvas.toDataURL("image/jpeg", quality));
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);
@@ -92,6 +117,14 @@ export function tinyPhoto(blob: Blob): Promise<string | null> {
     };
     img.src = url;
   });
+}
+
+export function prettyPersonName(raw: string): string {
+  const t = raw.trim();
+  if (!t) return "Someone";
+  if (/^\+?\d[\d\s()-]{5,}$/.test(t)) return "Someone";
+  if (/^them$/i.test(t)) return "Someone";
+  return t.slice(0, 24);
 }
 
 export function phoneDigits(raw: string): string {
@@ -106,6 +139,30 @@ export function waPhone(raw: string): string {
   if (d.startsWith("0") && d.length >= 9 && d.length <= 11) d = `972${d.slice(1)}`;
   if (!d.startsWith("972") && d.length === 9 && d.startsWith("5")) d = `972${d}`;
   return d;
+}
+
+export function formatPhone(raw: string): { display: string; country: string } {
+  const d = waPhone(raw);
+  if (!d) return { display: "", country: "" };
+  if (d.startsWith("972")) {
+    const n = d.slice(3);
+    const pretty =
+      n.length >= 8 ? `${n.slice(0, 2)}-${n.slice(2, 5)}-${n.slice(5)}` : n;
+    return { display: `+972 ${pretty}`, country: "Israel" };
+  }
+  if (d.startsWith("66")) {
+    const n = d.slice(2);
+    const pretty = n.length >= 8 ? `${n.slice(0, 2)} ${n.slice(2, 5)} ${n.slice(5)}` : n;
+    return { display: `+66 ${pretty}`, country: "Thailand" };
+  }
+  if (d.startsWith("1") && d.length === 11) {
+    const n = d.slice(1);
+    return { display: `+1 (${n.slice(0, 3)}) ${n.slice(3, 6)}-${n.slice(6)}`, country: "US/CA" };
+  }
+  if (d.startsWith("44")) {
+    return { display: `+44 ${d.slice(2)}`, country: "UK" };
+  }
+  return { display: `+${d}`, country: "" };
 }
 
 export function isValidPhone(raw: string): boolean {

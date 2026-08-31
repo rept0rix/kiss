@@ -1,27 +1,36 @@
-import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import { BootSplash } from "@/components/boot-splash";
 import { CatchScreen } from "@/components/catch-screen";
 import { ConfettiBurst } from "@/components/confetti-burst";
 import { KissOrbit } from "@/components/kiss-orbit";
 import { KissSky } from "@/components/kiss-sky";
 import { LiveKiss } from "@/components/live-kiss";
+import { LoginRain } from "@/components/login-rain";
+import { Confirm } from "@/components/confirm";
+import { MyProfile, rememberPhoto } from "@/components/my-profile";
+import { PersonSheet } from "@/components/person-sheet";
+import { PhotoPick } from "@/components/photo-pick";
 import { SendSheet, type SendTarget } from "@/components/send-sheet";
 import { SoundSettings } from "@/components/sound-settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { invalidateHome, invalidatePhoneInbox, useHome, usePhoneInbox } from "@/hooks/use-home";
 import { useKeyboardInset } from "@/hooks/use-keyboard";
-import { GROK_PROVIDERS, authEnabled, signIn, signOut } from "@/lib/auth/client";
+import { GROK_PROVIDERS, authEnabled, signIn } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { catchKiss, catchPhoneKiss, registerPhone, searchDirectory, sendKiss, setDisplayName, setPhone } from "@/lib/kisses/server";
+import { blockPhone, catchKiss, catchPhoneKiss, lookupFace, registerPhone, searchDirectory, sendKiss, sendPhoneKiss, setDisplayName, setPhone, unblockPhone } from "@/lib/kisses/server";
 import { isLive } from "@/lib/kisses/online";
 import { nextRank, rankAt } from "@/lib/kisses/ranks";
 import type { HomePayload, OrbitItem } from "@/lib/kisses/types";
-import { isValidPhone, loadRecents, phoneDigits } from "@/lib/contacts";
+import { formatPhone, isValidPhone, loadRecents, phoneDigits, prettyPersonName, shrinkDataUrl } from "@/lib/contacts";
+import { blockLocal, isBlocked, unblockLocal } from "@/lib/block";
+import { addPhoto, loadGallery, saveGallery } from "@/lib/gallery";
 import { cropPhoto, loadMe, saveMe, type MeState } from "@/lib/me";
 import { askNotify, notifyKiss } from "@/lib/notify";
-import { playCelebrate, soundsOn, unlockSound } from "@/lib/sound";
+import { playCelebrate, soundsOn, startMusic, unlockSound } from "@/lib/sound";
+import { canSuper, consumeSuper, openSuperWindow, superState } from "@/lib/super";
+import { Settings, Volume2, VolumeX } from "lucide-react";
 
 type Search = { k?: string; p?: string };
 
@@ -50,6 +59,7 @@ function Home() {
       skin?: string | null;
       canReply?: boolean;
       inbound?: boolean;
+      tel?: string;
     }>
   >([]);
   const live = queue[0] ?? null;
@@ -57,12 +67,17 @@ function Home() {
   function nextLive() {
     setQueue((q) => q.slice(1));
   }
+  const [person, setPerson] = useState<OrbitItem | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [finding, setFinding] = useState(false);
+  const [askDelete, setAskDelete] = useState(false);
   const [gate, setGate] = useState(false);
-  const [bootReady, setBootReady] = useState(() => Boolean(loadMe().entered));
+  const [bootReady, setBootReady] = useState(false);
   const [settings, setSettings] = useState(false);
+  const [photoOpen, setPhotoOpen] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [draftPhone, setDraftPhone] = useState("");
-  const photoRef = useRef<HTMLInputElement>(null);
+  const [superTick, setSuperTick] = useState(0);
   const liveUser = user && !user.isDevFallback ? user : null;
   const home = useHome(Boolean(liveUser));
   const phoneBox = usePhoneInbox(me.phone);
@@ -151,7 +166,7 @@ function Home() {
       grouped.set(k.fromName, list);
     }
     const next = [...grouped.entries()].map(([fromName, list], i) => ({
-      from: fromName,
+      from: prettyPersonName(fromName),
       photo: me.orbit.find((o) => o.name === fromName)?.photo ?? null,
       first: first && i === 0,
       count: list.length,
@@ -159,8 +174,10 @@ function Home() {
       canReply: !(home.data?.sent ?? []).some((s) => s.toName.toLowerCase() === fromName.toLowerCase()),
       inbound: true,
     }));
-    celebrate(next[0]?.count ?? 1);
+    celebrate(1);
     notifyKiss(next[0]?.from ?? "Someone");
+    askNotify();
+    openSuperWindow();
     setQueue((q) => {
       const names = new Set(q.map((x) => x.from));
       return [...q, ...next.filter((x) => !names.has(x.from))];
@@ -176,8 +193,11 @@ function Home() {
 
   useEffect(() => {
     if (!isValidPhone(me.phone)) return;
-    void registerPhone({ data: { phone: me.phone, name: me.name, photo: me.photo } }).catch(() => undefined);
-  }, [me.phone, me.name]);
+    void (async () => {
+      const photo = me.photo ? await shrinkDataUrl(me.photo, 160) : null;
+      await registerPhone({ data: { phone: me.phone, name: me.name, photo } }).catch(() => undefined);
+    })();
+  }, [me.phone, me.name, me.photo]);
 
   useEffect(() => {
     if (!liveUser || !isValidPhone(me.phone)) return;
@@ -186,7 +206,7 @@ function Home() {
 
   useEffect(() => {
     const inbox = phoneBox.data ?? [];
-    const fresh = inbox.filter((k) => k.id > me.lastPhoneId);
+    const fresh = inbox.filter((k) => k.id > me.lastPhoneId && !isBlocked(k.fromName, k.fromPhone));
     if (fresh.length === 0) return;
     const maxId = Math.max(...fresh.map((k) => k.id));
     const first = me.received === 0;
@@ -197,17 +217,24 @@ function Home() {
       list.push(k);
       grouped.set(k.fromName, list);
     }
+    const recents = loadRecents();
     const next = [...grouped.entries()].map(([fromName, list], i) => ({
-      from: fromName,
-      photo: me.orbit.find((o) => o.name === fromName)?.photo ?? null,
+      from: prettyPersonName(fromName),
+      photo:
+        list[0]?.photo ??
+        me.orbit.find((o) => o.name === fromName)?.photo ??
+        recents.find((c) => c.name === fromName)?.photo ??
+        null,
       first: first && i === 0,
       count: list.reduce((s, k) => s + k.count, 0),
       skin: list[0]?.kind,
       canReply: true,
       inbound: true,
     }));
-    celebrate(next[0]?.count ?? 1);
+    celebrate(1);
     notifyKiss(next[0]?.from ?? "Someone");
+    askNotify();
+    openSuperWindow();
     setQueue((q) => {
       const names = new Set(q.map((x) => x.from));
       return [...q, ...next.filter((x) => !names.has(x.from))];
@@ -218,19 +245,80 @@ function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phoneBox.data]);
 
-  const orbit = useMemo(
-    () => mergeOrbit(me.orbit, home.data),
-    [me.orbit, home.data],
-  );
+  const orbit = useMemo(() => mergeOrbit(me.orbit, home.data), [me.orbit, home.data]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setSuperTick((n) => n + 1), 500);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (!me.entered) return;
+    let gone = false;
+    void searchDirectory({ data: { q: "", myPhone: me.phone } }).then((rows) => {
+      if (gone) return;
+      const recents = loadRecents();
+      setMe((prev) => {
+        let changed = false;
+        const orbit = prev.orbit.map((o) => {
+          const rec = recents.find(
+            (c) =>
+              c.name.toLowerCase() === o.name.toLowerCase() ||
+              (o.tel && c.tel && c.tel.replace(/\D/g, "").slice(-8) === o.tel.replace(/\D/g, "").slice(-8)),
+          );
+          const hit = rows.find(
+            (r) =>
+              r.displayName.toLowerCase() === o.name.toLowerCase() ||
+              (o.tel && r.phone && r.phone.slice(-8) === o.tel.replace(/\D/g, "").slice(-8)),
+          );
+          const photo = o.photo || rec?.photo || hit?.photo || null;
+          if (photo === o.photo) return o;
+          changed = true;
+          return { ...o, photo, tel: o.tel || rec?.tel || hit?.phone || o.tel, realName: o.realName || o.name };
+        });
+        if (!changed) return prev;
+        const next = { ...prev, orbit };
+        saveMe(next);
+        return next;
+      });
+    });
+    return () => {
+      gone = true;
+    };
+  }, [me.entered, me.phone]);
+
+  const [catchPhoto, setCatchPhoto] = useState<string | null>(null);
+  useEffect(() => {
+    if (!search.k) return;
+    void lookupFace({ data: { name: search.k, phone: search.p } }).then((r) => setCatchPhoto(r.photo));
+  }, [search.k, search.p]);
+
+  useEffect(() => {
+    if (!me.entered || !bootReady) return;
+    unlockSound();
+    startMusic();
+  }, [me.entered, bootReady]);
 
   if (!bootReady) {
+    if (me.entered) {
+      return (
+        <LoginRain
+          name={me.name}
+          people={me.orbit}
+          sent={me.sent}
+          caught={me.received}
+          onReady={() => setBootReady(true)}
+        />
+      );
+    }
     return <BootSplash onReady={() => setBootReady(true)} />;
   }
 
   if (search.k) {
     return (
       <CatchScreen
-        from={search.k}
+        from={prettyPersonName(search.k || "Someone")}
+        photo={catchPhoto}
         first={me.received === 0}
         onCaught={() => {
           setMe((prev) => {
@@ -288,13 +376,39 @@ function Home() {
             draftPhone={draftPhone || me.phone || search.p || ""}
             onDraftPhone={setDraftPhone}
             onReady={(phone) => {
-              patch({ entered: true, phone });
-              void registerPhone({ data: { phone, name: me.name } }).catch(() => undefined);
+              setFinding(true);
               setGate(false);
+              patch({ entered: true, phone });
+              void lookupFace({ data: { phone } })
+                .then((hit) => {
+                  setMe((prev) => {
+                    const next = {
+                      ...prev,
+                      entered: true,
+                      phone,
+                      name: hit.name || prev.name,
+                      photo: hit.photo || prev.photo,
+                    };
+                    saveMe(next);
+                    return next;
+                  });
+                  if (hit.photo) rememberPhoto(hit.photo);
+                })
+                .finally(() => setFinding(false));
             }}
           />
         ) : null}
       </>
+    );
+  }
+
+  if (finding) {
+    return (
+      <KissSky storm={10}>
+        <div className="stage">
+          <p className="login-kicker">Looking you up</p>
+        </div>
+      </KissSky>
     );
   }
 
@@ -321,78 +435,63 @@ function Home() {
     <>
       <KissSky quiet={sendOpen}>
         <ConfettiBurst show={burst} />
-        <input
-          ref={photoRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            e.target.value = "";
-            if (!file) return;
-            void cropPhoto(file).then((data) => patch({ photo: data }));
+        <Link to="/live" className="hud-live">
+          <i className="live-pulse" />
+          LIVE
+        </Link>
+        <button
+          type="button"
+          className="hud-gear"
+          onClick={() => setSettings(true)}
+          aria-label="Settings"
+        >
+          <Settings size={18} />
+        </button>
+        <button
+          type="button"
+          className="hud-sound"
+          onClick={() => {
+            unlockSound();
+            setSettings(true);
           }}
-        />
+          aria-label={soundsOn() ? "Sound on" : "Sound off"}
+        >
+          {soundsOn() ? <Volume2 size={18} /> : <VolumeX size={18} />}
+        </button>
         <div className="stage">
         <KissOrbit
           photo={photo}
           items={orbit}
-          onAddPhoto={() => photoRef.current?.click()}
+          onAddPhoto={() => setProfileOpen(true)}
+          onEmpty={() => {
+            setSendTarget(null);
+            setSendOpen(true);
+          }}
           onCatch={(item) => {
             const rec = loadRecents().find((c) => c.name.toLowerCase() === item.name.toLowerCase());
-            const isWaiting = item.dir === "in" && item.status === "waiting";
-            const inbound = item.dir === "in";
-            const count = Math.max(
-              1,
-              inbound ? (item.toMe ?? 1) : (item.fromMe ?? 1),
-            );
+            const tel = item.tel || rec?.tel || "";
             const photo = item.photo ?? rec?.photo ?? null;
-            if (isWaiting) {
-              celebrate(count);
-              if (item.serverId) {
-                void catchKiss({ data: item.serverId }).then(() => invalidateHome());
-              }
+            if (item.dir === "in" && item.status === "waiting") {
+              celebrate(Math.max(1, item.toMe ?? 1));
+              if (item.serverId) void catchKiss({ data: item.serverId }).then(() => invalidateHome());
               setMe((prev) => {
-                const nextOrbit = prev.orbit.map((k) =>
-                  k.id === item.id ? { ...k, status: "caught" as const } : k,
-                );
-                const next = { ...prev, received: prev.received + 1, orbit: nextOrbit };
+                const next = {
+                  ...prev,
+                  received: prev.received + 1,
+                  orbit: prev.orbit.map((k) =>
+                    k.id === item.id ? { ...k, status: "caught" as const, lastIn: Date.now() } : k,
+                  ),
+                };
                 saveMe(next);
                 return next;
               });
             }
-            setQueue((q) => [
-              {
-                from: item.name,
-                photo,
-                first: isWaiting && received === 0,
-                count,
-                skin: item.skin,
-                canReply: inbound,
-                inbound,
-              },
-              ...q.filter((x) => x.from !== item.name),
-            ]);
-            setSendTarget({
-              name: item.name,
-              tel: item.tel || rec?.tel || "",
+            setPerson({
+              ...item,
+              tel,
               photo,
+              realName: item.realName || item.name,
             });
-            if (!photo) {
-              void searchDirectory({ data: { q: item.tel || item.name, myPhone: me.phone } }).then((rows) => {
-                const found = rows.find((p) => p.displayName.toLowerCase() === item.name.toLowerCase()) ?? rows[0];
-                if (!found?.photo) return;
-                setQueue((q) => q.map((x) => (x.from === item.name ? { ...x, photo: found.photo ?? null } : x)));
-                setMe((prev) => {
-                  const next = {
-                    ...prev,
-                    orbit: prev.orbit.map((k) => (k.name === item.name ? { ...k, photo: found.photo ?? k.photo } : k)),
-                  };
-                  saveMe(next);
-                  return next;
-                });
-              });
-            }
           }}
           onFace={(id, face) => {
             setMe((prev) => {
@@ -458,7 +557,12 @@ function Home() {
             if (liveUser) void setDisplayName({ data: name });
           }}
         />
-        <p className="phone-line">{me.phone}</p>
+        <p className="phone-line">
+          {formatPhone(me.phone).display}
+          {formatPhone(me.phone).country ? (
+            <span className="phone-cc"> {formatPhone(me.phone).country}</span>
+          ) : null}
+        </p>
 
         <p className="counts">
           <span className="tabular-nums text-fg">{sent}</span> sent
@@ -533,31 +637,60 @@ function Home() {
           >
             Send kiss
           </Button>
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-3 text-sm text-muted">
-            <button type="button" className="underline-offset-4 hover:underline" onClick={() => setSettings(true)}>
-              {soundsOn() ? "Sound on" : "Sound off"}
+          {canSuper() ? (
+            <button
+              type="button"
+              className="super-dock"
+              onClick={() => {
+                unlockSound();
+                askNotify();
+                setSendTarget(null);
+                setSendOpen(true);
+              }}
+            >
+              Super kiss
+              {superState().windowMs > 0 ? ` · ${Math.ceil(superState().windowMs / 1000)}s` : " · 1 today"}
             </button>
-            {authEnabled && !liveUser
-              ? GROK_PROVIDERS.map((p) => (
-                  <button
-                    key={p.providerId}
-                    type="button"
-                    className="underline-offset-4 hover:underline"
-                    onClick={() => signIn(p.providerId, { callbackURL: "/" })}
-                  >
-                    {p.label}
-                  </button>
-                ))
-              : null}
-            {liveUser ? (
+          ) : null}
+          <p className="connect-label">Connect friends</p>
+          <div className="social-row">
+            {GROK_PROVIDERS.map((p) => (
               <button
+                key={p.providerId}
                 type="button"
-                className="underline-offset-4 hover:underline"
-                onClick={() => void signOut()}
+                className="social-ic"
+                aria-label={p.label}
+                onClick={() => {
+                  if (authEnabled) signIn(p.providerId, { callbackURL: "/" });
+                }}
               >
-                Out
+                {p.idp === "google" ? (
+                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+                    <path fill="#ea4335" d="M12 10.2v3.6h5.1c-.2 1.2-1.3 3.6-5.1 3.6-3.1 0-5.6-2.5-5.6-5.6S8.9 6.2 12 6.2c1.8 0 3 .7 3.7 1.4l2.5-2.4C16.7 3.7 14.6 2.8 12 2.8 6.9 2.8 2.8 6.9 2.8 12S6.9 21.2 12 21.2c5.2 0 8.6-3.6 8.6-8.7 0-.6 0-1-.1-1.5H12z" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden>
+                    <path fill="currentColor" d="M14.5 10.6 22 2h-2.2l-6.5 7.4L8.1 2H2l7.9 11.3L2 22h2.2l7.1-8.1L15.9 22H22l-7.5-11.4Zm-2.5 2.9-.8-1.2-6.5-9.2h2.8l5.2 7.5.8 1.2 6.7 9.7h-2.8l-5.4-7.9Z" />
+                  </svg>
+                )}
               </button>
-            ) : null}
+            ))}
+            <button
+              type="button"
+              className="social-ic"
+              aria-label="WhatsApp"
+              onClick={() => {
+                setSendTarget(null);
+                setSendOpen(true);
+              }}
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+                <path
+                  fill="#25D366"
+                  d="M12.04 2C6.58 2 2.15 6.4 2.15 11.86c0 1.74.46 3.44 1.34 4.94L2 22l5.35-1.4a9.86 9.86 0 0 0 4.69 1.2h.01c5.46 0 9.89-4.4 9.89-9.86C21.94 6.4 17.5 2 12.04 2Zm5.76 14.17c-.24.68-1.4 1.25-1.94 1.33-.5.07-1.13.1-1.82-.11-.42-.13-.96-.31-1.66-.61-2.92-1.26-4.82-4.2-4.97-4.4-.14-.2-1.18-1.57-1.18-3 0-1.42.75-2.12 1.01-2.41.24-.27.64-.39 1.02-.39.12 0 .23 0 .33.01.3.01.44-.09.69.53.24.63.83 2.04.9 2.19.08.15.12.33.02.53-.1.2-.15.33-.3.5-.14.18-.3.4-.43.53-.14.14-.29.3-.12.58.16.29.73 1.2 1.57 1.95 1.08.96 1.99 1.26 2.27 1.4.28.14.45.12.61-.07.17-.2.7-.81.89-1.09.18-.27.37-.23.62-.14.26.09 1.63.77 1.91.91.28.14.46.21.53.33.07.12.07.68-.17 1.36Z"
+                />
+              </svg>
+            </button>
           </div>
         </div>
       </div>
@@ -567,7 +700,7 @@ function Home() {
         open={sendOpen}
         myName={displayName}
         myPhone={me.phone}
-        myPhoto={me.photo}
+        myPhoto={loadGallery().send || me.photo}
         signedIn={Boolean(liveUser)}
         mySent={sent}
         people={home.data?.people ?? []}
@@ -598,10 +731,127 @@ function Home() {
             return next;
           });
           celebrate(payload.count ?? 1);
+          if (payload.status === "waiting") {
+            /* in-app */
+          }
           void invalidateHome();
         }}
       />
-      {settings ? <SoundSettings open onClose={() => setSettings(false)} /> : null}
+      <PhotoPick
+        open={photoOpen}
+        onClose={() => setPhotoOpen(false)}
+        onFile={(file) => {
+          void cropPhoto(file).then(async (data) => {
+            rememberPhoto(data);
+            const g = addPhoto(data);
+            patch({ photo: g.main || data });
+            if (me.phone) {
+              const photo = await shrinkDataUrl(data, 160);
+              void registerPhone({ data: { phone: me.phone, name: me.name, photo } }).catch(() => undefined);
+            }
+          });
+        }}
+      />
+      {profileOpen ? (
+        <MyProfile
+          name={displayName}
+          phone={me.phone}
+          sent={sent}
+          caught={received}
+          photo={me.photo}
+          onClose={() => setProfileOpen(false)}
+          onAddPhoto={() => setPhotoOpen(true)}
+          onMain={(p) => {
+            const g = loadGallery();
+            saveGallery({ ...g, main: p });
+            patch({ photo: p });
+            if (me.phone) void registerPhone({ data: { phone: me.phone, name: me.name, photo: p } }).catch(() => undefined);
+          }}
+          onSend={(p) => {
+            const g = loadGallery();
+            saveGallery({ ...g, send: p });
+          }}
+        />
+      ) : null}
+      {settings ? (
+        <SoundSettings
+          open
+          myPhone={me.phone}
+          onClose={() => setSettings(false)}
+          onDelete={() => setAskDelete(true)}
+        />
+      ) : null}
+      <Confirm
+        open={askDelete}
+        title="Delete me?"
+        body="This phone is wiped on this device. You can join again."
+        yes="Delete"
+        onNo={() => setAskDelete(false)}
+        onYes={() => {
+          try {
+            window.localStorage.clear();
+          } catch {
+            /* ignore */
+          }
+          window.location.reload();
+        }}
+      />
+      {person ? (
+        <PersonSheet
+          item={person}
+          busy={false}
+          myPhone={me.phone}
+          myName={me.name}
+          onClose={() => setPerson(null)}
+          onKiss={() => {
+            const who = person;
+            const tel = who.tel;
+            celebrate(1);
+            setMe((prev) => {
+              const next = {
+                ...prev,
+                sent: prev.sent + 1,
+                orbit: prev.orbit.map((o) =>
+                  o.id === who.id || o.name === who.name
+                    ? { ...o, fromMe: (o.fromMe ?? 0) + 1, lastOut: Date.now(), dir: "out" as const }
+                    : o,
+                ),
+              };
+              saveMe(next);
+              return next;
+            });
+            setPerson((p) =>
+              p ? { ...p, fromMe: (p.fromMe ?? 0) + 1, lastOut: Date.now() } : p,
+            );
+            if (tel && isValidPhone(me.phone) && isValidPhone(tel)) {
+              void sendPhoneKiss({
+                data: {
+                  fromPhone: me.phone,
+                  fromName: me.name,
+                  toPhone: tel,
+                  count: 1,
+                  kind: rankAt(sent).skin,
+                },
+              }).catch(() => undefined);
+            }
+          }}
+          onBlock={() => {
+            const who = person;
+            const tel = who.tel;
+            if (isBlocked(who.name, tel)) {
+              unblockLocal({ name: who.name, tel });
+              if (me.phone && tel) void unblockPhone({ data: { myPhone: me.phone, theirPhone: tel } }).catch(() => undefined);
+            } else {
+              blockLocal({ name: who.realName || who.name, tel });
+              if (me.phone && tel) {
+                void blockPhone({
+                  data: { myPhone: me.phone, theirPhone: tel, theirName: who.realName || who.name },
+                }).catch(() => undefined);
+              }
+            }
+          }}
+        />
+      ) : null}
       {live ? (
         <LiveKiss
           from={live.from}
@@ -611,6 +861,7 @@ function Home() {
           skin={live.skin}
           canReply={live.canReply !== false}
           inbound={live.inbound !== false}
+          superMs={superState().windowMs}
           more={queue.length > 1}
           onClose={nextLive}
           onReply={() => {
@@ -635,6 +886,46 @@ function Home() {
               photo: live.photo || rec?.photo || null,
             });
             askNotify();
+            setSendOpen(true);
+          }}
+          onBlock={() => {
+            const from = live.from;
+            const rec = loadRecents().find((c) => c.name.toLowerCase() === from.toLowerCase());
+            const tel = sendTarget?.tel || rec?.tel || live.tel || "";
+            blockLocal({ name: from, tel });
+            if (isValidPhone(me.phone) && tel) {
+              void blockPhone({ data: { myPhone: me.phone, theirPhone: tel, theirName: from } }).catch(() => undefined);
+            }
+            setMe((prev) => {
+              const next = { ...prev, orbit: prev.orbit.filter((o) => o.name !== from) };
+              saveMe(next);
+              return next;
+            });
+            nextLive();
+          }}
+          onSuper={() => {
+            const from = live.from;
+            const rec = loadRecents().find((c) => c.name.toLowerCase() === from.toLowerCase());
+            const person = (home.data?.people ?? []).find(
+              (p) => p.displayName.toLowerCase() === from.toLowerCase(),
+            );
+            if (!canSuper()) return;
+            consumeSuper();
+            nextLive();
+            if (person && liveUser) {
+              void sendKiss({ data: { toUserId: person.userId, kind: "super", count: 1 } }).then(
+                () => {
+                  celebrate(8);
+                  void invalidateHome();
+                },
+              );
+              return;
+            }
+            setSendTarget({
+              name: from,
+              tel: sendTarget?.tel || rec?.tel || "",
+              photo: live.photo || rec?.photo || null,
+            });
             setSendOpen(true);
           }}
           onFlood={() => {
@@ -696,8 +987,17 @@ function mergeOrbit(local: OrbitItem[], data: HomePayload | undefined): OrbitIte
     }
   }
 
-  const photoOf = (name: string) =>
-    local.find((l) => l.name.toLowerCase() === name.toLowerCase() && l.photo)?.photo ?? null;
+  const photoOf = (name: string, tel?: string) => {
+    const recents = loadRecents();
+    return (
+      local.find((l) => l.name.toLowerCase() === name.toLowerCase() && l.photo)?.photo ??
+      recents.find((c) => c.name.toLowerCase() === name.toLowerCase())?.photo ??
+      (tel
+        ? recents.find((c) => c.tel.replace(/\D/g, "").slice(-8) === tel.replace(/\D/g, "").slice(-8))?.photo
+        : null) ??
+      null
+    );
+  };
   const telOf = (name: string) =>
     local.find((l) => l.name.toLowerCase() === name.toLowerCase() && l.tel)?.tel;
 
@@ -784,7 +1084,7 @@ function mergeOrbit(local: OrbitItem[], data: HomePayload | undefined): OrbitIte
       if (aw !== bw) return aw - bw;
       return (b.toMe ?? 0) + (b.fromMe ?? 0) - ((a.toMe ?? 0) + (a.fromMe ?? 0));
     })
-    .slice(0, 6);
+    .slice(0, 12);
 }
 
 function RankBar({ kisses }: { kisses: number }) {
@@ -798,13 +1098,7 @@ function RankBar({ kisses }: { kisses: number }) {
     <div className="rank-bar">
       <p className="rank-name">
         {rank.name}
-        {next ? (
-          <span className="rank-next">
-            {kisses}/{next.min} · {next.name}
-          </span>
-        ) : (
-          <span className="rank-next">max</span>
-        )}
+        {next ? <span className="rank-next">{kisses}/{next.min}</span> : null}
       </p>
       <span className="rank-track">
         <span className="rank-fill" style={{ width: `${pct}%` }} />

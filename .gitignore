@@ -3,3 +3,16 @@ node_modules/
 .github_repo
 .env
 .env.*
+.vercel/
+attachments/
+artifacts/
+.grok/
+AGENTS.md
+AGENTS.project.md
+*.tsbuildinfo
+.DS_Store
+dist/
+.output/
+.nitro/
+.tanstack/
+.wrangler/

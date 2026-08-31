@@ -1,1 +1,0 @@
-import{n as e}from"./routes-l0i1SKDk.js";export{e as getBearerToken};

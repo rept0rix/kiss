@@ -12,8 +12,10 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as FriendsRouteImport } from './routes/friends'
 import { Route as InboxRouteImport } from './routes/inbox'
+import { Route as LiveRouteImport } from './routes/live'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as CCodeRouteImport } from './routes/c.$code'
 import { Route as KFromRouteImport } from './routes/k.$from'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiOgCodeRouteImport } from './routes/api/og.$code'
@@ -33,6 +35,11 @@ const InboxRoute = InboxRouteImport.update({
   path: '/inbox',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LiveRoute = LiveRouteImport.update({
+  id: '/live',
+  path: '/live',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -41,6 +48,11 @@ const LoginRoute = LoginRouteImport.update({
 const ProfileRoute = ProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CCodeRoute = CCodeRouteImport.update({
+  id: '/c/$code',
+  path: '/c/$code',
   getParentRoute: () => rootRouteImport,
 } as any)
 const KFromRoute = KFromRouteImport.update({
@@ -63,8 +75,10 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/friends': typeof FriendsRoute
   '/inbox': typeof InboxRoute
+  '/live': typeof LiveRoute
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
+  '/c/$code': typeof CCodeRoute
   '/k/$from': typeof KFromRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/og/$code': typeof ApiOgCodeRoute
@@ -73,8 +87,10 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/friends': typeof FriendsRoute
   '/inbox': typeof InboxRoute
+  '/live': typeof LiveRoute
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
+  '/c/$code': typeof CCodeRoute
   '/k/$from': typeof KFromRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/og/$code': typeof ApiOgCodeRoute
@@ -84,8 +100,10 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/friends': typeof FriendsRoute
   '/inbox': typeof InboxRoute
+  '/live': typeof LiveRoute
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
+  '/c/$code': typeof CCodeRoute
   '/k/$from': typeof KFromRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/og/$code': typeof ApiOgCodeRoute
@@ -96,8 +114,10 @@ export interface FileRouteTypes {
     | '/'
     | '/friends'
     | '/inbox'
+    | '/live'
     | '/login'
     | '/profile'
+    | '/c/$code'
     | '/k/$from'
     | '/api/auth/$'
     | '/api/og/$code'
@@ -106,8 +126,10 @@ export interface FileRouteTypes {
     | '/'
     | '/friends'
     | '/inbox'
+    | '/live'
     | '/login'
     | '/profile'
+    | '/c/$code'
     | '/k/$from'
     | '/api/auth/$'
     | '/api/og/$code'
@@ -116,8 +138,10 @@ export interface FileRouteTypes {
     | '/'
     | '/friends'
     | '/inbox'
+    | '/live'
     | '/login'
     | '/profile'
+    | '/c/$code'
     | '/k/$from'
     | '/api/auth/$'
     | '/api/og/$code'
@@ -127,8 +151,10 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   FriendsRoute: typeof FriendsRoute
   InboxRoute: typeof InboxRoute
+  LiveRoute: typeof LiveRoute
   LoginRoute: typeof LoginRoute
   ProfileRoute: typeof ProfileRoute
+  CCodeRoute: typeof CCodeRoute
   KFromRoute: typeof KFromRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiOgCodeRoute: typeof ApiOgCodeRoute
@@ -157,6 +183,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InboxRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/live': {
+      id: '/live'
+      path: '/live'
+      fullPath: '/live'
+      preLoaderRoute: typeof LiveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -169,6 +202,13 @@ declare module '@tanstack/react-router' {
       path: '/profile'
       fullPath: '/profile'
       preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/c/$code': {
+      id: '/c/$code'
+      path: '/c/$code'
+      fullPath: '/c/$code'
+      preLoaderRoute: typeof CCodeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/k/$from': {
@@ -199,8 +239,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   FriendsRoute: FriendsRoute,
   InboxRoute: InboxRoute,
+  LiveRoute: LiveRoute,
   LoginRoute: LoginRoute,
   ProfileRoute: ProfileRoute,
+  CCodeRoute: CCodeRoute,
   KFromRoute: KFromRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiOgCodeRoute: ApiOgCodeRoute,

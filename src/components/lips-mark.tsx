@@ -1,17 +1,10 @@
-export function LipsMark({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 64 40" className={className} aria-hidden>
-      <path
-        d="M8 22c6-10 14-14 24-14s18 4 24 14c-6 10-14 14-24 14S14 32 8 22Z"
-        fill="currentColor"
-      />
-      <path
-        d="M10 22c5-1 11 2 22 2s17-3 22-2"
-        fill="none"
-        stroke="var(--color-bg)"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
+const COUNT = 25;
+
+export function lipSrc(i: number): string {
+  const n = ((i % COUNT) + COUNT) % COUNT;
+  return `/lips/lip-${String(n + 1).padStart(2, "0")}.png`;
+}
+
+export function LipsMark({ className, i = 0 }: { className?: string; i?: number }) {
+  return <img src={lipSrc(i)} alt="" className={className} draggable={false} />;
 }
