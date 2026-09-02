@@ -75,7 +75,14 @@ export function SoundSettings({
           <button
             type="button"
             className="sound-row"
-            onClick={() => void signOut()}
+            onClick={() => {
+              try {
+                window.localStorage.clear();
+              } catch {
+                /* ignore */
+              }
+              void signOut();
+            }}
           >
             <span>Log out</span>
             <span className="sound-off">Leave</span>

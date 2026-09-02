@@ -18,6 +18,15 @@ export function LoginRain({
   caught: number;
   onReady: () => void;
 }) {
+  const safeName = (() => {
+    const trimmed = name.trim();
+    const words = trimmed.split(/\s+/);
+    const half = Math.ceil(words.length / 2);
+    if (words.length > 1 && words.slice(0, half).join(" ") === words.slice(half).join(" ")) {
+      return words.slice(0, half).join(" ");
+    }
+    return trimmed;
+  })();
   const [calm, setCalm] = useState(false);
   const senders = useMemo(() => {
     const seen = new Set<string>();
@@ -109,7 +118,7 @@ export function LoginRain({
       <div className="login-copy">
         <div className="login-glass">
           <p className="login-kicker">You're in</p>
-          <h1 className="login-hi">{(name || "Kiss").toUpperCase()}</h1>
+          <h1 className="login-hi">{(safeName || "Kiss").toUpperCase()}</h1>
           <p className="login-count">
             <strong>{sent}</strong> sent
             <span>·</span>
