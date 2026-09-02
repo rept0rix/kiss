@@ -6,7 +6,6 @@ import { ConfettiBurst } from "@/components/confetti-burst";
 import { KissOrbit } from "@/components/kiss-orbit";
 import { KissSky } from "@/components/kiss-sky";
 import { LiveKiss } from "@/components/live-kiss";
-import { LoginRain } from "@/components/login-rain";
 import { Confirm } from "@/components/confirm";
 import { MyProfile, rememberPhoto } from "@/components/my-profile";
 import { PersonSheet } from "@/components/person-sheet";
@@ -80,7 +79,6 @@ function Home() {
   const [draftName, setDraftName] = useState("");
   const [draftPhone, setDraftPhone] = useState("");
   const [superTick, setSuperTick] = useState(0);
-  const [liveOpened, setLiveOpened] = useState<number | null>(null);
   const liveUser = user && !user.isDevFallback ? user : null;
   const home = useHome(Boolean(liveUser));
   const phoneBox = usePhoneInbox(me.phone);
@@ -261,14 +259,6 @@ function Home() {
   }, [phoneBox.data, queue]);
 
   const orbit = useMemo(() => mergeOrbit(me.orbit, home.data), [me.orbit, home.data]);
-
-  useEffect(() => {
-    if (live) {
-      setLiveOpened(Date.now());
-    } else {
-      setLiveOpened(null);
-    }
-  }, [live]);
 
   useEffect(() => {
     const id = window.setInterval(() => setSuperTick((n) => n + 1), 500);
