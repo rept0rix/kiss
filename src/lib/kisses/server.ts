@@ -211,6 +211,35 @@ export const getHome = createServerFn({ method: "GET" })
       limit 40
     `;
 
+    let phoneInboxRows: Array<{
+      id: number;
+      from_phone: string;
+      from_name: string;
+      kind: string;
+      n: number;
+      created_at: string;
+      caught_at: string | null;
+    }> = [];
+    if (profile?.phone) {
+      phoneInboxRows = await sql<{
+        id: number;
+        from_phone: string;
+        from_name: string;
+        kind: string;
+        n: number;
+        created_at: string;
+        caught_at: string | null;
+      }>`
+        select pk.id, pk.from_phone, pk.from_name, pk.kind, pk.n,
+               pk.created_at::text as created_at,
+               pk.caught_at::text as caught_at
+        from phone_kisses pk
+        where (pk.to_phone = ${profile.phone} or right(pk.to_phone, 8) = ${profile.phone.slice(-8)})
+        order by pk.created_at desc
+        limit 40
+      `.catch(() => []);
+    }
+
     const sentRows = await sql<{
       id: number;
       to_user_id: string;
@@ -228,6 +257,40 @@ export const getHome = createServerFn({ method: "GET" })
       limit 20
     `;
 
+    let phoneSentRows: Array<{
+      id: number;
+      to_phone: string;
+      to_name: string;
+      kind: string;
+      n: number;
+      created_at: string;
+      caught_at: string | null;
+    }> = [];
+    if (profile?.phone) {
+      phoneSentRows = await sql<{
+        id: number;
+        to_phone: string;
+        to_name: string;
+        kind: string;
+        n: number;
+        created_at: string;
+        caught_at: string | null;
+      }>`
+        select pk.id, pk.to_phone,
+               coalesce(
+                 (select display_name from phone_book where right(phone, 8) = right(pk.to_phone, 8) limit 1),
+                 pk.to_phone
+               ) as to_name,
+               pk.kind, pk.n,
+               pk.created_at::text as created_at,
+               pk.caught_at::text as caught_at
+        from phone_kisses pk
+        where (pk.from_phone = ${profile.phone} or right(pk.from_phone, 8) = ${profile.phone.slice(-8)})
+        order by pk.created_at desc
+        limit 20
+      `.catch(() => []);
+    }
+
     const counts = await sql<{ sent: number; received: number; randoms: number; sent_all: number; received_all: number }>`
       select
         (select count(*)::int from kisses where from_user_id = ${me} and created_at::date = current_date) as sent,
@@ -236,6 +299,29 @@ export const getHome = createServerFn({ method: "GET" })
         (select count(*)::int from kisses where from_user_id = ${me}) as sent_all,
         (select count(*)::int from kisses where to_user_id = ${me}) as received_all
     `;
+
+    let phoneCountSent = 0;
+    let phoneCountReceived = 0;
+    let phoneCountSentAll = 0;
+    let phoneCountReceivedAll = 0;
+    if (profile?.phone) {
+      const phoneCounts = await sql<{
+        sent: number;
+        received: number;
+        sent_all: number;
+        received_all: number;
+      }>`
+        select
+          (select coalesce(sum(n), 0)::int from phone_kisses where (from_phone = ${profile.phone} or right(from_phone, 8) = ${profile.phone.slice(-8)}) and created_at::date = current_date) as sent,
+          (select coalesce(sum(n), 0)::int from phone_kisses where (to_phone = ${profile.phone} or right(to_phone, 8) = ${profile.phone.slice(-8)}) and created_at::date = current_date) as received,
+          (select coalesce(sum(n), 0)::int from phone_kisses where (from_phone = ${profile.phone} or right(from_phone, 8) = ${profile.phone.slice(-8)})) as sent_all,
+          (select coalesce(sum(n), 0)::int from phone_kisses where (to_phone = ${profile.phone} or right(to_phone, 8) = ${profile.phone.slice(-8)})) as received_all
+      `.catch(() => [{ sent: 0, received: 0, sent_all: 0, received_all: 0 }]);
+      phoneCountSent = Number(phoneCounts[0]?.sent ?? 0);
+      phoneCountReceived = Number(phoneCounts[0]?.received ?? 0);
+      phoneCountSentAll = Number(phoneCounts[0]?.sent_all ?? 0);
+      phoneCountReceivedAll = Number(phoneCounts[0]?.received_all ?? 0);
+    }
 
     const leaderRows = await sql<{
       user_id: string;
@@ -283,27 +369,51 @@ export const getHome = createServerFn({ method: "GET" })
       friendshipId: Number(r.id),
     }));
 
-    const inbox: KissRow[] = inboxRows.map((r) => ({
-      id: Number(r.id),
-      fromUserId: r.from_user_id,
-      toUserId: r.to_user_id,
-      kind: r.kind,
-      note: r.note,
-      createdAt: r.created_at,
-      caughtAt: r.caught_at,
-      fromHandle: r.from_handle,
-      fromName: r.from_name,
-      fromHue: Number(r.from_hue),
-    }));
+    const inbox: KissRow[] = [
+      ...inboxRows.map((r) => ({
+        id: Number(r.id),
+        fromUserId: r.from_user_id,
+        toUserId: r.to_user_id,
+        kind: r.kind,
+        note: r.note,
+        createdAt: r.created_at,
+        caughtAt: r.caught_at,
+        fromHandle: r.from_handle,
+        fromName: r.from_name,
+        fromHue: Number(r.from_hue),
+      })),
+      ...phoneInboxRows.map((r) => ({
+        id: Number(r.id) + 1000000,
+        fromUserId: `p:${r.from_phone}`,
+        toUserId: me,
+        kind: r.kind,
+        note: "",
+        createdAt: r.created_at,
+        caughtAt: r.caught_at,
+        fromHandle: r.from_phone.slice(-4),
+        fromName: r.from_name,
+        fromHue: Math.abs(hashCode(r.from_phone)) % 360,
+      })),
+    ].sort((a, b) => (a.createdAt > b.createdAt ? -1 : 1)).slice(0, 40);
 
-    const sent: SentKiss[] = sentRows.map((r) => ({
-      id: Number(r.id),
-      toUserId: r.to_user_id,
-      toName: r.to_name,
-      toHandle: r.to_handle,
-      caught: Boolean(r.caught_at),
-      createdAt: r.created_at,
-    }));
+    const sent: SentKiss[] = [
+      ...sentRows.map((r) => ({
+        id: Number(r.id),
+        toUserId: r.to_user_id,
+        toName: r.to_name,
+        toHandle: r.to_handle,
+        caught: Boolean(r.caught_at),
+        createdAt: r.created_at,
+      })),
+      ...phoneSentRows.map((r) => ({
+        id: Number(r.id) + 1000000,
+        toUserId: `p:${r.to_phone}`,
+        toName: r.to_name,
+        toHandle: r.to_phone.slice(-4),
+        caught: Boolean(r.caught_at),
+        createdAt: r.created_at,
+      })),
+    ].sort((a, b) => (a.createdAt > b.createdAt ? -1 : 1)).slice(0, 20);
 
     const leaderboard: LeaderRow[] = leaderRows.map((r) => ({
       userId: r.user_id,
@@ -349,10 +459,10 @@ export const getHome = createServerFn({ method: "GET" })
       incoming,
       inbox,
       sent,
-      sentToday: Number(counts[0]?.sent ?? 0),
-      receivedToday: Number(counts[0]?.received ?? 0),
-      sentAll: Number(counts[0]?.sent_all ?? 0),
-      receivedAll: Number(counts[0]?.received_all ?? 0),
+      sentToday: Number(counts[0]?.sent ?? 0) + phoneCountSent,
+      receivedToday: Number(counts[0]?.received ?? 0) + phoneCountReceived,
+      sentAll: Number(counts[0]?.sent_all ?? 0) + phoneCountSentAll,
+      receivedAll: Number(counts[0]?.received_all ?? 0) + phoneCountReceivedAll,
       randomRemaining: randomUsed >= 1 ? 0 : 1,
       leaderboard,
       people,
@@ -632,13 +742,23 @@ export const catchKiss = createServerFn({ method: "POST" })
   .validator((id: number) => id)
   .handler(async ({ context, data: id }) => {
     const sql = await getSql();
-    await sql`
-      update kisses
-      set caught_at = now()
-      where id = ${id}
-        and to_user_id = ${context.userId}
-        and caught_at is null
-    `;
+    if (id >= 1000000) {
+      const phoneId = id - 1000000;
+      await sql`
+        update phone_kisses
+        set caught_at = now()
+        where id = ${phoneId}
+          and caught_at is null
+      `.catch(() => undefined);
+    } else {
+      await sql`
+        update kisses
+        set caught_at = now()
+        where id = ${id}
+          and to_user_id = ${context.userId}
+          and caught_at is null
+      `;
+    }
     return { ok: true as const };
   });
 

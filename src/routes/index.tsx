@@ -74,10 +74,7 @@ function Home() {
   const [finding, setFinding] = useState(false);
   const [askDelete, setAskDelete] = useState(false);
   const [gate, setGate] = useState(false);
-  const [bootReady, setBootReady] = useState(() => {
-    const stored = loadMe();
-    return stored.entered && (stored.sent > 0 || stored.received > 0);
-  });
+  const [bootReady, setBootReady] = useState(false);
   const [settings, setSettings] = useState(false);
   const [photoOpen, setPhotoOpen] = useState(false);
   const [draftName, setDraftName] = useState("");
@@ -229,7 +226,7 @@ function Home() {
     if (fresh.length === 0) return;
     const maxId = Math.max(...fresh.map((k) => k.id));
     const first = me.received === 0;
-    patch({ lastPhoneId: maxId, received: me.received + fresh.reduce((s, k) => s + k.count, 0) });
+    patch({ lastPhoneId: maxId });
     const grouped = new Map<string, typeof fresh>();
     for (const k of fresh) {
       const list = grouped.get(k.fromName) ?? [];
@@ -318,15 +315,8 @@ function Home() {
 
   if (!bootReady) {
     if (me.entered) {
-      return (
-        <LoginRain
-          name={me.name}
-          people={me.orbit}
-          sent={me.sent}
-          caught={me.received}
-          onReady={() => setBootReady(true)}
-        />
-      );
+      setBootReady(true);
+      return null;
     }
     return <BootSplash onReady={() => setBootReady(true)} />;
   }
@@ -881,12 +871,12 @@ function Home() {
           superMs={superState().windowMs}
           more={queue.length > 1}
           onClose={() => {
-            if (live.kissIds) {
+            if (live.kissIds && live.kissIds.length > 0) {
               for (const id of live.kissIds) {
                 void catchKiss({ data: id }).then(() => invalidateHome());
               }
             }
-            if (live.phoneKissIds) {
+            if (live.phoneKissIds && live.phoneKissIds.length > 0) {
               for (const id of live.phoneKissIds) {
                 void catchPhoneKiss({ data: id }).then(() => invalidatePhoneInbox());
               }
