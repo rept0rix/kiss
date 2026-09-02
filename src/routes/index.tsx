@@ -392,8 +392,8 @@ function Home() {
             draftPhone={draftPhone || me.phone || search.p || ""}
             onDraftPhone={setDraftPhone}
             onReady={(phone) => {
-              setFinding(true);
               setGate(false);
+              setFinding(true);
               patch({ entered: true, phone });
               void lookupFace({ data: { phone } })
                 .then((hit) => {
@@ -409,6 +409,13 @@ function Home() {
                     return next;
                   });
                   if (hit.photo) rememberPhoto(hit.photo);
+                })
+                .catch(() => {
+                  setMe((prev) => {
+                    const next = { ...prev, entered: true, phone };
+                    saveMe(next);
+                    return next;
+                  });
                 })
                 .finally(() => setFinding(false));
             }}
