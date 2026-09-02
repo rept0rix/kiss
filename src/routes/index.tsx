@@ -178,11 +178,10 @@ function Home() {
 
   useEffect(() => {
     const inbox = home.data?.inbox ?? [];
-    const fresh = inbox.filter((k) => !k.caughtAt && k.id > me.lastInboxId);
+    const queuedKissIds = new Set(queue.flatMap((q) => q.kissIds ?? []));
+    const fresh = inbox.filter((k) => !k.caughtAt && !queuedKissIds.has(k.id));
     if (fresh.length === 0) return;
-    const maxId = Math.max(...fresh.map((k) => k.id));
     const first = me.received === 0;
-    patch({ lastInboxId: maxId });
     const grouped = new Map<string, typeof fresh>();
     for (const k of fresh) {
       const list = grouped.get(k.fromName) ?? [];
@@ -208,7 +207,7 @@ function Home() {
       return [...q, ...next.filter((x) => !names.has(x.from))];
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [home.data?.inbox]);
+  }, [home.data?.inbox, queue]);
 
   useEffect(() => {
     if (!isValidPhone(me.phone)) return;
@@ -225,11 +224,10 @@ function Home() {
 
   useEffect(() => {
     const inbox = phoneBox.data ?? [];
-    const fresh = inbox.filter((k) => k.id > me.lastPhoneId && !isBlocked(k.fromName, k.fromPhone));
+    const queuedPhoneKissIds = new Set(queue.flatMap((q) => q.phoneKissIds ?? []));
+    const fresh = inbox.filter((k) => !queuedPhoneKissIds.has(k.id) && !isBlocked(k.fromName, k.fromPhone));
     if (fresh.length === 0) return;
-    const maxId = Math.max(...fresh.map((k) => k.id));
     const first = me.received === 0;
-    patch({ lastPhoneId: maxId });
     const grouped = new Map<string, typeof fresh>();
     for (const k of fresh) {
       const list = grouped.get(k.fromName) ?? [];
@@ -260,7 +258,7 @@ function Home() {
       return [...q, ...next.filter((x) => !names.has(x.from))];
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phoneBox.data]);
+  }, [phoneBox.data, queue]);
 
   const orbit = useMemo(() => mergeOrbit(me.orbit, home.data), [me.orbit, home.data]);
 
@@ -886,11 +884,6 @@ function Home() {
           superMs={superState().windowMs}
           more={queue.length > 1}
           onClose={() => {
-            const elapsed = liveOpened ? Date.now() - liveOpened : 0;
-            if (elapsed < 300) {
-              nextLive();
-              return;
-            }
             if (live.kissIds && live.kissIds.length > 0) {
               for (const id of live.kissIds) {
                 void catchKiss({ data: id }).then(() => invalidateHome());
