@@ -954,11 +954,15 @@ async function findPhoto(
   phone?: string | null,
   name?: string | null,
 ): Promise<string | null> {
-  const digits = (phone ?? "").replace(/\D/g, "");
-  if (digits.length >= 7) {
+  const phoneStr = phone ? normalizePhone(phone) : "";
+  if (phoneStr.length >= 4) {
     const rows = await sql<{ photo: string | null }>`
       select photo from phone_book
-      where photo is not null and right(phone, 8) = ${digits.slice(-8)}
+      where photo is not null 
+        and (phone = ${phoneStr}
+           or right(phone, 8) = right(${phoneStr}, 8)
+           or (length(phone) <= 8 and ${phoneStr} like '%' || phone)
+           or (length(${phoneStr}) <= 8 and phone like '%' || ${phoneStr}))
       limit 1
     `;
     if (rows[0]?.photo) return rows[0].photo;
@@ -1407,13 +1411,17 @@ export const lookupFace = createServerFn({ method: "POST" })
   .validator((data: { name?: string; phone?: string }) => data)
   .handler(async ({ data }) => {
     const sql = await getSql();
-    const photo = await findPhoto(sql, data.phone ?? null, data.name ?? null);
+    const rawPhone = (data.phone ?? "").replace(/\D/g, "");
+    const phone = normalizePhone(rawPhone);
+    const photo = await findPhoto(sql, phone, data.name ?? null);
     let name = "";
-    const digits = (data.phone ?? "").replace(/\D/g, "");
-    if (digits.length >= 7) {
+    if (phone.length >= 4) {
       const rows = await sql<{ display_name: string }>`
         select display_name from phone_book
-        where right(phone, 8) = ${digits.slice(-8)}
+        where (phone = ${phone}
+           or right(phone, 8) = right(${phone}, 8)
+           or (length(phone) <= 8 and ${phone} like '%' || phone)
+           or (length(${phone}) <= 8 and phone like '%' || ${phone}))
         limit 1
       `.catch(() => []);
       name = rows[0]?.display_name?.trim() || "";
