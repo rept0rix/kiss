@@ -234,7 +234,10 @@ export const getHome = createServerFn({ method: "GET" })
                pk.created_at::text as created_at,
                pk.caught_at::text as caught_at
         from phone_kisses pk
-        where (pk.to_phone = ${profile.phone} or right(pk.to_phone, 8) = ${profile.phone.slice(-8)})
+        where (pk.to_phone = ${profile.phone} 
+           or right(pk.to_phone, 8) = right(${profile.phone}, 8)
+           or (length(pk.to_phone) <= 8 and ${profile.phone} like '%' || pk.to_phone)
+           or (length(${profile.phone}) <= 8 and pk.to_phone like '%' || ${profile.phone}))
         order by pk.created_at desc
         limit 40
       `.catch(() => []);
@@ -285,7 +288,10 @@ export const getHome = createServerFn({ method: "GET" })
                pk.created_at::text as created_at,
                pk.caught_at::text as caught_at
         from phone_kisses pk
-        where (pk.from_phone = ${profile.phone} or right(pk.from_phone, 8) = ${profile.phone.slice(-8)})
+        where (pk.from_phone = ${profile.phone} 
+           or right(pk.from_phone, 8) = right(${profile.phone}, 8)
+           or (length(pk.from_phone) <= 8 and ${profile.phone} like '%' || pk.from_phone)
+           or (length(${profile.phone}) <= 8 and pk.from_phone like '%' || ${profile.phone}))
         order by pk.created_at desc
         limit 20
       `.catch(() => []);
@@ -312,10 +318,29 @@ export const getHome = createServerFn({ method: "GET" })
         received_all: number;
       }>`
         select
-          (select coalesce(sum(n), 0)::int from phone_kisses where (from_phone = ${profile.phone} or right(from_phone, 8) = ${profile.phone.slice(-8)}) and created_at::date = current_date) as sent,
-          (select coalesce(sum(n), 0)::int from phone_kisses where (to_phone = ${profile.phone} or right(to_phone, 8) = ${profile.phone.slice(-8)}) and created_at::date = current_date) as received,
-          (select coalesce(sum(n), 0)::int from phone_kisses where (from_phone = ${profile.phone} or right(from_phone, 8) = ${profile.phone.slice(-8)})) as sent_all,
-          (select coalesce(sum(n), 0)::int from phone_kisses where (to_phone = ${profile.phone} or right(to_phone, 8) = ${profile.phone.slice(-8)}) and caught_at is not null) as received_all
+          (select coalesce(sum(n), 0)::int from phone_kisses 
+           where (from_phone = ${profile.phone} 
+              or right(from_phone, 8) = right(${profile.phone}, 8)
+              or (length(from_phone) <= 8 and ${profile.phone} like '%' || from_phone)
+              or (length(${profile.phone}) <= 8 and from_phone like '%' || ${profile.phone}))
+             and created_at::date = current_date) as sent,
+          (select coalesce(sum(n), 0)::int from phone_kisses 
+           where (to_phone = ${profile.phone} 
+              or right(to_phone, 8) = right(${profile.phone}, 8)
+              or (length(to_phone) <= 8 and ${profile.phone} like '%' || to_phone)
+              or (length(${profile.phone}) <= 8 and to_phone like '%' || ${profile.phone}))
+             and created_at::date = current_date) as received,
+          (select coalesce(sum(n), 0)::int from phone_kisses 
+           where (from_phone = ${profile.phone} 
+              or right(from_phone, 8) = right(${profile.phone}, 8)
+              or (length(from_phone) <= 8 and ${profile.phone} like '%' || from_phone)
+              or (length(${profile.phone}) <= 8 and from_phone like '%' || ${profile.phone}))) as sent_all,
+          (select coalesce(sum(n), 0)::int from phone_kisses 
+           where (to_phone = ${profile.phone} 
+              or right(to_phone, 8) = right(${profile.phone}, 8)
+              or (length(to_phone) <= 8 and ${profile.phone} like '%' || to_phone)
+              or (length(${profile.phone}) <= 8 and to_phone like '%' || ${profile.phone}))
+             and caught_at is not null) as received_all
       `.catch(() => [{ sent: 0, received: 0, sent_all: 0, received_all: 0 }]);
       phoneCountSent = Number(phoneCounts[0]?.sent ?? 0);
       phoneCountReceived = Number(phoneCounts[0]?.received ?? 0);
@@ -785,6 +810,10 @@ function normalizePhone(raw: string): string {
     d = d.slice(2);
   } else if (d.startsWith("0") && d.length === 10) {
     d = `972${d.slice(1)}`;
+  } else if (d.startsWith("555") && d.length >= 4 && d.length <= 10) {
+    d = `972${d}`;
+  } else if (!d.startsWith("972") && d.length >= 4 && d.length <= 7) {
+    d = `972555${d}`;
   }
   return d;
 }
@@ -1253,7 +1282,10 @@ export const phoneInbox = createServerFn({ method: "POST" })
           limit 1
         ) as photo
       from phone_kisses pk
-      where (pk.to_phone = ${phone} or right(pk.to_phone, 8) = ${phone.slice(-8)})
+      where (pk.to_phone = ${phone} 
+         or right(pk.to_phone, 8) = right(${phone}, 8)
+         or (length(pk.to_phone) <= 8 and ${phone} like '%' || pk.to_phone)
+         or (length(${phone}) <= 8 and pk.to_phone like '%' || ${phone}))
         and pk.caught_at is null
       order by pk.created_at desc
       limit 30
