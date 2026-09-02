@@ -142,16 +142,16 @@ function Home() {
   }, [search.p]);
 
   useEffect(() => {
-    const all = home.data?.sentAll;
-    if (typeof all !== "number") return;
-    if (all > me.sent) patch({ sent: all });
+    const sentAll = home.data?.sentAll;
+    if (typeof sentAll === "number") {
+      patch({ sent: sentAll });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [home.data?.sentAll]);
 
   useEffect(() => {
     const receivedAll = home.data?.receivedAll;
-    if (typeof receivedAll !== "number") return;
-    if (receivedAll > me.received) {
+    if (typeof receivedAll === "number") {
       patch({ received: receivedAll });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -159,10 +159,12 @@ function Home() {
 
   useEffect(() => {
     if (!home.data || !me.entered) return;
-    if (me.orbit.length > 0) return;
-    const hydratedOrbit = mergeOrbit([], home.data);
+    const hydratedOrbit = mergeOrbit(me.orbit, home.data);
     if (hydratedOrbit.length > 0) {
-      patch({ orbit: hydratedOrbit.slice(0, 12) });
+      const orbitChanged = JSON.stringify(hydratedOrbit.slice(0, 12)) !== JSON.stringify(me.orbit.slice(0, 12));
+      if (orbitChanged || me.orbit.length === 0) {
+        patch({ orbit: hydratedOrbit.slice(0, 12) });
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [home.data?.inbox, home.data?.sent]);
@@ -364,11 +366,8 @@ function Home() {
 
   const displayName = me.name || liveUser?.displayName || "You";
   const photo = me.photo || liveUser?.profileImageUrl || null;
-  const sent = Math.max(me.sent, home.data?.sent.length ?? 0);
-  const received = Math.max(
-    me.received,
-    home.data?.receivedAll ?? 0,
-  );
+  const sent = home.data?.sentAll ?? me.sent;
+  const received = home.data?.receivedAll ?? me.received;
   const phoneOk = isValidPhone(me.phone || home.data?.profile?.phone || search.p || "");
   const nameOk = (me.name || "").trim().length >= 2;
 
