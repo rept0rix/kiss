@@ -297,7 +297,7 @@ export const getHome = createServerFn({ method: "GET" })
         (select count(*)::int from kisses where to_user_id = ${me} and created_at::date = current_date) as received,
         (select count(*)::int from kisses where from_user_id = ${me} and kind = 'random' and created_at::date = current_date) as randoms,
         (select count(*)::int from kisses where from_user_id = ${me}) as sent_all,
-        (select count(*)::int from kisses where to_user_id = ${me}) as received_all
+        (select count(*)::int from kisses where to_user_id = ${me} and caught_at is not null) as received_all
     `;
 
     let phoneCountSent = 0;
@@ -315,7 +315,7 @@ export const getHome = createServerFn({ method: "GET" })
           (select coalesce(sum(n), 0)::int from phone_kisses where (from_phone = ${profile.phone} or right(from_phone, 8) = ${profile.phone.slice(-8)}) and created_at::date = current_date) as sent,
           (select coalesce(sum(n), 0)::int from phone_kisses where (to_phone = ${profile.phone} or right(to_phone, 8) = ${profile.phone.slice(-8)}) and created_at::date = current_date) as received,
           (select coalesce(sum(n), 0)::int from phone_kisses where (from_phone = ${profile.phone} or right(from_phone, 8) = ${profile.phone.slice(-8)})) as sent_all,
-          (select coalesce(sum(n), 0)::int from phone_kisses where (to_phone = ${profile.phone} or right(to_phone, 8) = ${profile.phone.slice(-8)})) as received_all
+          (select coalesce(sum(n), 0)::int from phone_kisses where (to_phone = ${profile.phone} or right(to_phone, 8) = ${profile.phone.slice(-8)}) and caught_at is not null) as received_all
       `.catch(() => [{ sent: 0, received: 0, sent_all: 0, received_all: 0 }]);
       phoneCountSent = Number(phoneCounts[0]?.sent ?? 0);
       phoneCountReceived = Number(phoneCounts[0]?.received ?? 0);
