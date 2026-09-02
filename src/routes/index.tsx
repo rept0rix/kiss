@@ -899,7 +899,10 @@ function Home() {
             }
             if (live.phoneKissIds && live.phoneKissIds.length > 0) {
               for (const id of live.phoneKissIds) {
-                void catchPhoneKiss({ data: id }).then(() => invalidatePhoneInbox());
+                void catchPhoneKiss({ data: id }).then(() => {
+                  invalidatePhoneInbox();
+                  invalidateHome();
+                });
               }
             }
             nextLive();
