@@ -75,13 +75,17 @@ export function SoundSettings({
           <button
             type="button"
             className="sound-row"
-            onClick={() => {
+            onClick={async () => {
+              try {
+                await signOut();
+              } catch {
+                /* ignore - signOut handles its own errors */
+              }
               try {
                 window.localStorage.clear();
               } catch {
                 /* ignore */
               }
-              void signOut();
             }}
           >
             <span>Log out</span>
