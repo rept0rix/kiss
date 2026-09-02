@@ -367,7 +367,7 @@ function Home() {
   const sent = Math.max(me.sent, home.data?.sent.length ?? 0);
   const received = Math.max(
     me.received,
-    (home.data?.inbox ?? []).filter((k) => k.caughtAt).length,
+    home.data?.receivedAll ?? 0,
   );
   const phoneOk = isValidPhone(me.phone || home.data?.profile?.phone || search.p || "");
   const nameOk = (me.name || "").trim().length >= 2;
