@@ -80,6 +80,7 @@ function Home() {
   const [draftName, setDraftName] = useState("");
   const [draftPhone, setDraftPhone] = useState("");
   const [superTick, setSuperTick] = useState(0);
+  const [liveOpened, setLiveOpened] = useState<number | null>(null);
   const liveUser = user && !user.isDevFallback ? user : null;
   const home = useHome(Boolean(liveUser));
   const phoneBox = usePhoneInbox(me.phone);
@@ -260,6 +261,14 @@ function Home() {
   }, [phoneBox.data]);
 
   const orbit = useMemo(() => mergeOrbit(me.orbit, home.data), [me.orbit, home.data]);
+
+  useEffect(() => {
+    if (live) {
+      setLiveOpened(Date.now());
+    } else {
+      setLiveOpened(null);
+    }
+  }, [live]);
 
   useEffect(() => {
     const id = window.setInterval(() => setSuperTick((n) => n + 1), 500);
@@ -871,6 +880,11 @@ function Home() {
           superMs={superState().windowMs}
           more={queue.length > 1}
           onClose={() => {
+            const elapsed = liveOpened ? Date.now() - liveOpened : 0;
+            if (elapsed < 300) {
+              nextLive();
+              return;
+            }
             if (live.kissIds && live.kissIds.length > 0) {
               for (const id of live.kissIds) {
                 void catchKiss({ data: id }).then(() => invalidateHome());
