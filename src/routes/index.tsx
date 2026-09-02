@@ -60,6 +60,8 @@ function Home() {
       canReply?: boolean;
       inbound?: boolean;
       tel?: string;
+      kissIds?: number[];
+      phoneKissIds?: number[];
     }>
   >([]);
   const live = queue[0] ?? null;
@@ -72,7 +74,10 @@ function Home() {
   const [finding, setFinding] = useState(false);
   const [askDelete, setAskDelete] = useState(false);
   const [gate, setGate] = useState(false);
-  const [bootReady, setBootReady] = useState(false);
+  const [bootReady, setBootReady] = useState(() => {
+    const stored = loadMe();
+    return stored.entered && (stored.sent > 0 || stored.received > 0);
+  });
   const [settings, setSettings] = useState(false);
   const [photoOpen, setPhotoOpen] = useState(false);
   const [draftName, setDraftName] = useState("");
@@ -146,6 +151,25 @@ function Home() {
   }, [home.data?.sentAll]);
 
   useEffect(() => {
+    const receivedAll = home.data?.receivedAll;
+    if (typeof receivedAll !== "number") return;
+    if (receivedAll > me.received) {
+      patch({ received: receivedAll });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [home.data?.receivedAll]);
+
+  useEffect(() => {
+    if (!home.data || !me.entered) return;
+    if (me.orbit.length > 0) return;
+    const hydratedOrbit = mergeOrbit([], home.data);
+    if (hydratedOrbit.length > 0) {
+      patch({ orbit: hydratedOrbit.slice(0, 12) });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [home.data?.inbox, home.data?.sent]);
+
+  useEffect(() => {
     const theirPhone = home.data?.profile?.phone;
     if (!theirPhone || me.phone) return;
     patch({ phone: theirPhone });
@@ -173,6 +197,7 @@ function Home() {
       skin: list[0]?.kind,
       canReply: !(home.data?.sent ?? []).some((s) => s.toName.toLowerCase() === fromName.toLowerCase()),
       inbound: true,
+      kissIds: list.map((k) => k.id),
     }));
     celebrate(1);
     notifyKiss(next[0]?.from ?? "Someone");
@@ -182,12 +207,6 @@ function Home() {
       const names = new Set(q.map((x) => x.from));
       return [...q, ...next.filter((x) => !names.has(x.from))];
     });
-    const top = fresh[0];
-    if (top?.id) {
-      for (const k of fresh) {
-        void catchKiss({ data: k.id }).then(() => invalidateHome());
-      }
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [home.data?.inbox]);
 
@@ -230,6 +249,7 @@ function Home() {
       skin: list[0]?.kind,
       canReply: true,
       inbound: true,
+      phoneKissIds: list.map((k) => k.id),
     }));
     celebrate(1);
     notifyKiss(next[0]?.from ?? "Someone");
@@ -239,9 +259,6 @@ function Home() {
       const names = new Set(q.map((x) => x.from));
       return [...q, ...next.filter((x) => !names.has(x.from))];
     });
-    for (const k of fresh) {
-      void catchPhoneKiss({ data: k.id }).then(() => invalidatePhoneInbox());
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phoneBox.data]);
 
@@ -863,7 +880,19 @@ function Home() {
           inbound={live.inbound !== false}
           superMs={superState().windowMs}
           more={queue.length > 1}
-          onClose={nextLive}
+          onClose={() => {
+            if (live.kissIds) {
+              for (const id of live.kissIds) {
+                void catchKiss({ data: id }).then(() => invalidateHome());
+              }
+            }
+            if (live.phoneKissIds) {
+              for (const id of live.phoneKissIds) {
+                void catchPhoneKiss({ data: id }).then(() => invalidatePhoneInbox());
+              }
+            }
+            nextLive();
+          }}
           onReply={() => {
             const from = live.from;
             const rec = loadRecents().find((c) => c.name.toLowerCase() === from.toLowerCase());
