@@ -1,8 +1,8 @@
 import { getSoundPrefs, setSoundPrefs, unlockSound } from "@/lib/sound";
 import { loadBlocks, unblockLocal, type BlockedPerson } from "@/lib/block";
 import { authEnabled, signOut } from "@/lib/auth/client";
-import { unblockPhone } from "@/lib/kisses/server";
-import { useState } from "react";
+import { getRuntimeInfo, unblockPhone } from "@/lib/kisses/server";
+import { useEffect, useState } from "react";
 
 export function SoundSettings({
   open,
@@ -17,7 +17,29 @@ export function SoundSettings({
 }) {
   const [prefs, setPrefs] = useState(getSoundPrefs);
   const [blocked, setBlocked] = useState<BlockedPerson[]>(() => loadBlocks());
+  const [runtime, setRuntime] = useState<{ db: string; label: string } | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let gone = false;
+    void getRuntimeInfo()
+      .then((info) => {
+        if (!gone) setRuntime(info);
+      })
+      .catch(() => undefined);
+    return () => {
+      gone = true;
+    };
+  }, [open]);
+
   if (!open) return null;
+
+  const dataLine =
+    runtime === null
+      ? "Data · …"
+      : runtime.db === "neon"
+        ? `Data · Neon ${runtime.label}`
+        : "Data · preview DB (resets on restart)";
 
   function toggle(key: "kisses" | "hearts" | "music") {
     unlockSound();
@@ -97,6 +119,9 @@ export function SoundSettings({
             Delete me
           </button>
         ) : null}
+        <p className="mt-4 text-xs text-muted" data-testid="data-source">
+          {dataLine}
+        </p>
       </div>
     </div>
   );

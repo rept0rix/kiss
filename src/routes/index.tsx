@@ -15,7 +15,7 @@ import { SendSheet, type SendTarget } from "@/components/send-sheet";
 import { SoundSettings } from "@/components/sound-settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { invalidateHome, invalidatePhoneInbox, useHome, usePhoneInbox } from "@/hooks/use-home";
+import { invalidateHome, invalidatePhoneInbox, useHome, usePhoneInbox, usePhoneStats } from "@/hooks/use-home";
 import { useKeyboardInset } from "@/hooks/use-keyboard";
 import { GROK_PROVIDERS, authEnabled, signIn } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -25,6 +25,7 @@ import { nextRank, rankAt } from "@/lib/kisses/ranks";
 import type { HomePayload, OrbitItem } from "@/lib/kisses/types";
 import { formatPhone, isPhoneIdentity, isValidPhone, loadRecents, phoneDigits, prettyPersonName, shrinkDataUrl } from "@/lib/contacts";
 import { blockLocal, isBlocked, unblockLocal } from "@/lib/block";
+import { phonesMatch } from "@/lib/phone";
 import { addPhoto, loadGallery, saveGallery } from "@/lib/gallery";
 import { cropPhoto, loadMe, saveMe, type MeState } from "@/lib/me";
 import { askNotify, notifyKiss } from "@/lib/notify";
@@ -119,6 +120,21 @@ function Home() {
   const liveUser = user && !user.isDevFallback ? user : null;
   const home = useHome(Boolean(liveUser));
   const phoneBox = usePhoneInbox(me.phone);
+  const phoneTotals = usePhoneStats(me.phone);
+
+  // Home counters come from Neon whenever Neon has an answer. getHome already
+  // folds in phone kisses for a profile whose phone is this phone; otherwise
+  // (signed out, or profile not linked) the phone identity's own totals are
+  // added, so a localStorage wipe (log out) never zeroes what Neon knows.
+  const profilePhone = home.data?.profile?.phone ?? "";
+  const phoneInHome = Boolean(profilePhone && me.phone && phonesMatch(profilePhone, me.phone));
+  const hasServerCounts = Boolean(home.data || phoneTotals.data);
+  const serverSent = hasServerCounts
+    ? (home.data?.sentAll ?? 0) + (phoneInHome ? 0 : phoneTotals.data?.sentAll ?? 0)
+    : undefined;
+  const serverReceived = hasServerCounts
+    ? (home.data?.receivedAll ?? 0) + (phoneInHome ? 0 : phoneTotals.data?.receivedAll ?? 0)
+    : undefined;
 
   function patch(partial: Partial<MeState>) {
     setMe((prev) => {
@@ -177,20 +193,18 @@ function Home() {
   }, [search.p]);
 
   useEffect(() => {
-    const sentAll = home.data?.sentAll;
-    if (typeof sentAll === "number") {
-      patch({ sent: sentAll });
+    if (typeof serverSent === "number" && serverSent !== me.sent) {
+      patch({ sent: serverSent });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [home.data?.sentAll]);
+  }, [serverSent]);
 
   useEffect(() => {
-    const receivedAll = home.data?.receivedAll;
-    if (typeof receivedAll === "number") {
-      patch({ received: receivedAll });
+    if (typeof serverReceived === "number" && serverReceived !== me.received) {
+      patch({ received: serverReceived });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [home.data?.receivedAll]);
+  }, [serverReceived]);
 
   useEffect(() => {
     if (!home.data || !me.entered) return;
@@ -387,8 +401,8 @@ function Home() {
 
   const displayName = me.name || liveUser?.displayName || "You";
   const photo = me.photo || liveUser?.profileImageUrl || null;
-  const sent = home.data?.sentAll ?? me.sent;
-  const received = home.data?.receivedAll ?? me.received;
+  const sent = serverSent ?? me.sent;
+  const received = serverReceived ?? me.received;
   const phoneOk = isValidPhone(me.phone || home.data?.profile?.phone || search.p || "");
   const nameOk = (me.name || "").trim().length >= 2;
 
@@ -774,10 +788,8 @@ function Home() {
             return next;
           });
           celebrate(payload.count ?? 1);
-          if (payload.status === "waiting") {
-            /* in-app */
-          }
           void invalidateHome();
+          void invalidatePhoneInbox();
         }}
       />
       <PhotoPick
@@ -896,6 +908,7 @@ function Home() {
               p ? { ...p, fromMe: (p.fromMe ?? 0) + 1, lastOut: Date.now() } : p,
             );
             void invalidateHome();
+            void invalidatePhoneInbox();
             return true;
           }}
           onBlock={() => {

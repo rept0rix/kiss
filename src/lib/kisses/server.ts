@@ -1,9 +1,43 @@
 import { createServerFn } from "@tanstack/react-start";
-import { getSql, type Sql } from "@/lib/db";
+import { dbLabel, dbSource, getSql, type DbSource, type Sql } from "@/lib/db";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { MIN_PHONE_DIGITS, MIN_REAL_PHONE_DIGITS, MAX_PHONE_DIGITS, normalizePhone, phonesMatch } from "@/lib/phone";
 import { isKissKind, type KissKindId } from "./kinds";
-import type { Friend, HomePayload, KissRow, LeaderRow, Profile, PublicPerson, SentKiss } from "./types";
+import type { Friend, HomePayload, KissRow, LeaderRow, PhoneStats, Profile, PublicPerson, SentKiss } from "./types";
+
+const NO_PHONE_STATS: PhoneStats = { sentToday: 0, receivedToday: 0, sentAll: 0, receivedAll: 0 };
+
+/**
+ * Kiss totals for a phone identity, matched with phone_match so a short QA
+ * number, a missing country code or the full stored number all count the same
+ * rows. This is the only source of truth for phone-only users, who have no
+ * profile row and whose localStorage is wiped on log out.
+ */
+async function phoneCounts(sql: Sql, phone: string): Promise<PhoneStats> {
+  if (phone.length < MIN_PHONE_DIGITS) return NO_PHONE_STATS;
+  const rows = await sql<{ sent: number; received: number; sent_all: number; received_all: number }>`
+    select
+      (select coalesce(sum(n), 0)::int from phone_kisses
+       where phone_match(from_phone, ${phone})
+         and created_at::date = current_date) as sent,
+      (select coalesce(sum(n), 0)::int from phone_kisses
+       where phone_match(to_phone, ${phone})
+         and created_at::date = current_date) as received,
+      (select coalesce(sum(n), 0)::int from phone_kisses
+       where phone_match(from_phone, ${phone})) as sent_all,
+      (select coalesce(sum(n), 0)::int from phone_kisses
+       where phone_match(to_phone, ${phone})
+         and caught_at is not null) as received_all
+  `.catch(() => []);
+  const r = rows[0];
+  if (!r) return NO_PHONE_STATS;
+  return {
+    sentToday: Number(r.sent ?? 0),
+    receivedToday: Number(r.received ?? 0),
+    sentAll: Number(r.sent_all ?? 0),
+    receivedAll: Number(r.received_all ?? 0),
+  };
+}
 
 const HANDLE_RE = /^[a-z0-9_]{3,20}$/;
 
@@ -306,35 +340,7 @@ export const getHome = createServerFn({ method: "GET" })
         (select count(*)::int from kisses where to_user_id = ${me} and caught_at is not null) as received_all
     `;
 
-    let phoneCountSent = 0;
-    let phoneCountReceived = 0;
-    let phoneCountSentAll = 0;
-    let phoneCountReceivedAll = 0;
-    if (hasPhone) {
-      const phoneCounts = await sql<{
-        sent: number;
-        received: number;
-        sent_all: number;
-        received_all: number;
-      }>`
-        select
-          (select coalesce(sum(n), 0)::int from phone_kisses
-           where phone_match(from_phone, ${myPhone})
-             and created_at::date = current_date) as sent,
-          (select coalesce(sum(n), 0)::int from phone_kisses
-           where phone_match(to_phone, ${myPhone})
-             and created_at::date = current_date) as received,
-          (select coalesce(sum(n), 0)::int from phone_kisses
-           where phone_match(from_phone, ${myPhone})) as sent_all,
-          (select coalesce(sum(n), 0)::int from phone_kisses
-           where phone_match(to_phone, ${myPhone})
-             and caught_at is not null) as received_all
-      `.catch(() => [{ sent: 0, received: 0, sent_all: 0, received_all: 0 }]);
-      phoneCountSent = Number(phoneCounts[0]?.sent ?? 0);
-      phoneCountReceived = Number(phoneCounts[0]?.received ?? 0);
-      phoneCountSentAll = Number(phoneCounts[0]?.sent_all ?? 0);
-      phoneCountReceivedAll = Number(phoneCounts[0]?.received_all ?? 0);
-    }
+    const phoneTotals = hasPhone ? await phoneCounts(sql, myPhone) : NO_PHONE_STATS;
 
     const leaderRows = await sql<{
       user_id: string;
@@ -472,10 +478,10 @@ export const getHome = createServerFn({ method: "GET" })
       incoming,
       inbox,
       sent,
-      sentToday: Number(counts[0]?.sent ?? 0) + phoneCountSent,
-      receivedToday: Number(counts[0]?.received ?? 0) + phoneCountReceived,
-      sentAll: Number(counts[0]?.sent_all ?? 0) + phoneCountSentAll,
-      receivedAll: Number(counts[0]?.received_all ?? 0) + phoneCountReceivedAll,
+      sentToday: Number(counts[0]?.sent ?? 0) + phoneTotals.sentToday,
+      receivedToday: Number(counts[0]?.received ?? 0) + phoneTotals.receivedToday,
+      sentAll: Number(counts[0]?.sent_all ?? 0) + phoneTotals.sentAll,
+      receivedAll: Number(counts[0]?.received_all ?? 0) + phoneTotals.receivedAll,
       randomRemaining: randomUsed >= 1 ? 0 : 1,
       leaderboard,
       people,
@@ -1316,6 +1322,24 @@ export const phoneInbox = createServerFn({ method: "POST" })
     }
     return mapped.filter((r) => !blocked.some((b) => phonesMatch(b.blocked_phone, r.fromPhone)));
   });
+
+/** Home counters for a phone identity — what a signed-out user restores after a wipe. */
+export const phoneStats = createServerFn({ method: "POST" })
+  .validator((phone: string) => phone)
+  .handler(async ({ data: raw }): Promise<PhoneStats> => {
+    const phone = normalizePhone(raw);
+    if (phone.length < MIN_PHONE_DIGITS) return NO_PHONE_STATS;
+    const sql = await getSql();
+    return phoneCounts(sql, phone);
+  });
+
+/**
+ * Which database this deployment writes to. `label` is the Neon endpoint id
+ * (`ep-…`), never credentials — enough to tell a preview branch from main.
+ */
+export const getRuntimeInfo = createServerFn({ method: "GET" }).handler(
+  async (): Promise<{ db: DbSource; label: string }> => ({ db: dbSource, label: dbLabel }),
+);
 
 export const catchPhoneKiss = createServerFn({ method: "POST" })
   .validator((id: number) => id)
