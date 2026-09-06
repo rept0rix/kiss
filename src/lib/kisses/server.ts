@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
-import { getSql } from "@/lib/db";
+import { getSql, type Sql } from "@/lib/db";
 import { authMiddleware } from "@/lib/auth/middleware";
+import { MIN_PHONE_DIGITS, MIN_REAL_PHONE_DIGITS, MAX_PHONE_DIGITS, normalizePhone, phonesMatch } from "@/lib/phone";
 import { isKissKind, type KissKindId } from "./kinds";
 import type { Friend, HomePayload, KissRow, LeaderRow, Profile, PublicPerson, SentKiss } from "./types";
 
@@ -211,6 +212,11 @@ export const getHome = createServerFn({ method: "GET" })
       limit 40
     `;
 
+    // Phone rows are matched by identity (phone_match), so a profile holding a
+    // short QA number or a differently prefixed variant still finds its kisses.
+    const myPhone = profile.phone ? normalizePhone(profile.phone) : "";
+    const hasPhone = myPhone.length >= MIN_PHONE_DIGITS;
+
     let phoneInboxRows: Array<{
       id: number;
       from_phone: string;
@@ -220,7 +226,7 @@ export const getHome = createServerFn({ method: "GET" })
       created_at: string;
       caught_at: string | null;
     }> = [];
-    if (profile?.phone) {
+    if (hasPhone) {
       phoneInboxRows = await sql<{
         id: number;
         from_phone: string;
@@ -234,10 +240,7 @@ export const getHome = createServerFn({ method: "GET" })
                pk.created_at::text as created_at,
                pk.caught_at::text as caught_at
         from phone_kisses pk
-        where (pk.to_phone = ${profile.phone} 
-           or right(pk.to_phone, 8) = right(${profile.phone}, 8)
-           or (length(pk.to_phone) <= 8 and ${profile.phone} like '%' || pk.to_phone)
-           or (length(${profile.phone}) <= 8 and pk.to_phone like '%' || ${profile.phone}))
+        where phone_match(pk.to_phone, ${myPhone})
         order by pk.created_at desc
         limit 40
       `.catch(() => []);
@@ -269,7 +272,7 @@ export const getHome = createServerFn({ method: "GET" })
       created_at: string;
       caught_at: string | null;
     }> = [];
-    if (profile?.phone) {
+    if (hasPhone) {
       phoneSentRows = await sql<{
         id: number;
         to_phone: string;
@@ -281,17 +284,14 @@ export const getHome = createServerFn({ method: "GET" })
       }>`
         select pk.id, pk.to_phone,
                coalesce(
-                 (select display_name from phone_book where right(phone, 8) = right(pk.to_phone, 8) limit 1),
+                 (select display_name from phone_book where phone_match(phone, pk.to_phone) limit 1),
                  pk.to_phone
                ) as to_name,
                pk.kind, pk.n,
                pk.created_at::text as created_at,
                pk.caught_at::text as caught_at
         from phone_kisses pk
-        where (pk.from_phone = ${profile.phone} 
-           or right(pk.from_phone, 8) = right(${profile.phone}, 8)
-           or (length(pk.from_phone) <= 8 and ${profile.phone} like '%' || pk.from_phone)
-           or (length(${profile.phone}) <= 8 and pk.from_phone like '%' || ${profile.phone}))
+        where phone_match(pk.from_phone, ${myPhone})
         order by pk.created_at desc
         limit 20
       `.catch(() => []);
@@ -310,7 +310,7 @@ export const getHome = createServerFn({ method: "GET" })
     let phoneCountReceived = 0;
     let phoneCountSentAll = 0;
     let phoneCountReceivedAll = 0;
-    if (profile?.phone) {
+    if (hasPhone) {
       const phoneCounts = await sql<{
         sent: number;
         received: number;
@@ -318,28 +318,16 @@ export const getHome = createServerFn({ method: "GET" })
         received_all: number;
       }>`
         select
-          (select coalesce(sum(n), 0)::int from phone_kisses 
-           where (from_phone = ${profile.phone} 
-              or right(from_phone, 8) = right(${profile.phone}, 8)
-              or (length(from_phone) <= 8 and ${profile.phone} like '%' || from_phone)
-              or (length(${profile.phone}) <= 8 and from_phone like '%' || ${profile.phone}))
+          (select coalesce(sum(n), 0)::int from phone_kisses
+           where phone_match(from_phone, ${myPhone})
              and created_at::date = current_date) as sent,
-          (select coalesce(sum(n), 0)::int from phone_kisses 
-           where (to_phone = ${profile.phone} 
-              or right(to_phone, 8) = right(${profile.phone}, 8)
-              or (length(to_phone) <= 8 and ${profile.phone} like '%' || to_phone)
-              or (length(${profile.phone}) <= 8 and to_phone like '%' || ${profile.phone}))
+          (select coalesce(sum(n), 0)::int from phone_kisses
+           where phone_match(to_phone, ${myPhone})
              and created_at::date = current_date) as received,
-          (select coalesce(sum(n), 0)::int from phone_kisses 
-           where (from_phone = ${profile.phone} 
-              or right(from_phone, 8) = right(${profile.phone}, 8)
-              or (length(from_phone) <= 8 and ${profile.phone} like '%' || from_phone)
-              or (length(${profile.phone}) <= 8 and from_phone like '%' || ${profile.phone}))) as sent_all,
-          (select coalesce(sum(n), 0)::int from phone_kisses 
-           where (to_phone = ${profile.phone} 
-              or right(to_phone, 8) = right(${profile.phone}, 8)
-              or (length(to_phone) <= 8 and ${profile.phone} like '%' || to_phone)
-              or (length(${profile.phone}) <= 8 and to_phone like '%' || ${profile.phone}))
+          (select coalesce(sum(n), 0)::int from phone_kisses
+           where phone_match(from_phone, ${myPhone})) as sent_all,
+          (select coalesce(sum(n), 0)::int from phone_kisses
+           where phone_match(to_phone, ${myPhone})
              and caught_at is not null) as received_all
       `.catch(() => [{ sent: 0, received: 0, sent_all: 0, received_all: 0 }]);
       phoneCountSent = Number(phoneCounts[0]?.sent ?? 0);
@@ -801,25 +789,39 @@ export const setDisplayName = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
-function normalizePhone(raw: string): string {
-  const trimmed = raw.trim();
-  let d = trimmed.replace(/\D/g, "");
-  if (trimmed.startsWith("+")) {
-    /* already international digits */
-  } else if (d.startsWith("00")) {
-    d = d.slice(2);
-  } else if (d.startsWith("0") && d.length === 10) {
-    d = `972${d.slice(1)}`;
-  } else if (d.startsWith("555") && d.length >= 4 && d.length <= 10) {
-    d = `972${d}`;
-  } else if (!d.startsWith("972") && d.length >= 4 && d.length <= 7) {
-    d = `972555${d}`;
-  }
-  return d;
-}
+type PhoneIdentity = {
+  /** The phone as stored in Neon when someone already holds it, else the normalized input. */
+  phone: string;
+  name: string;
+  known: boolean;
+};
 
-function last8(phone: string): string {
-  return phone.slice(-8);
+/**
+ * Map any phone the client sends (full, missing country code, or a short QA
+ * identity like `1234`) onto the identity already stored in phone_book or
+ * profiles, so rows are written with the same digits every reader matches on.
+ * Exact matches win, then the longest (most complete) stored number.
+ */
+async function resolvePhoneIdentity(sql: Sql, raw: string): Promise<PhoneIdentity> {
+  const phone = normalizePhone(raw);
+  if (phone.length < MIN_PHONE_DIGITS || phone.length > MAX_PHONE_DIGITS) {
+    return { phone, name: "", known: false };
+  }
+  const book = await sql<{ phone: string; display_name: string }>`
+    select phone, display_name from phone_book
+    where phone_match(phone, ${phone})
+    order by (phone = ${phone}) desc, length(phone) desc, last_seen desc nulls last
+    limit 1
+  `;
+  if (book[0]) return { phone: book[0].phone, name: book[0].display_name.trim(), known: true };
+  const prof = await sql<{ phone: string; display_name: string }>`
+    select phone, display_name from profiles
+    where phone is not null and phone_match(phone, ${phone})
+    order by (phone = ${phone}) desc, length(phone) desc
+    limit 1
+  `;
+  if (prof[0]) return { phone: prof[0].phone, name: prof[0].display_name.trim(), known: true };
+  return { phone, name: "", known: false };
 }
 
 export const setPhone = createServerFn({ method: "POST" })
@@ -827,7 +829,9 @@ export const setPhone = createServerFn({ method: "POST" })
   .validator((phone: string) => phone)
   .handler(async ({ context, data: raw }) => {
     const phone = normalizePhone(raw);
-    if (phone.length < 8 || phone.length > 15) throw new Error("Need a real phone number");
+    if (phone.length < MIN_REAL_PHONE_DIGITS || phone.length > MAX_PHONE_DIGITS) {
+      throw new Error("Need a real phone number");
+    }
     const sql = await getSql();
     const taken = await sql<{ user_id: string }>`
       select user_id from profiles
@@ -955,14 +959,11 @@ async function findPhoto(
   name?: string | null,
 ): Promise<string | null> {
   const phoneStr = phone ? normalizePhone(phone) : "";
-  if (phoneStr.length >= 4) {
+  if (phoneStr.length >= MIN_PHONE_DIGITS) {
     const rows = await sql<{ photo: string | null }>`
       select photo from phone_book
-      where photo is not null 
-        and (phone = ${phoneStr}
-           or right(phone, 8) = right(${phoneStr}, 8)
-           or (length(phone) <= 8 and ${phoneStr} like '%' || phone)
-           or (length(${phoneStr}) <= 8 and phone like '%' || ${phoneStr}))
+      where photo is not null and phone_match(phone, ${phoneStr})
+      order by length(phone) desc
       limit 1
     `;
     if (rows[0]?.photo) return rows[0].photo;
@@ -1107,12 +1108,24 @@ function bookPerson(
 export const registerPhone = createServerFn({ method: "POST" })
   .validator((data: { phone: string; name?: string; photo?: string | null }) => data)
   .handler(async ({ data }) => {
-    const phone = normalizePhone(data.phone);
-    if (phone.length < 8 || phone.length > 15) throw new Error("Need a real phone number");
+    const raw = normalizePhone(data.phone);
+    if (raw.length < MIN_PHONE_DIGITS || raw.length > MAX_PHONE_DIGITS) {
+      throw new Error("Need a real phone number");
+    }
     const name = (data.name ?? "").trim().slice(0, 32);
     const rawPhoto = data.photo ?? "";
     const photo = rawPhoto.startsWith("data:image") ? rawPhoto.slice(0, 120000) : null;
     const sql = await getSql();
+    // Re-registering a number that is already in the book under another
+    // spelling (missing country code, short QA form) updates that row instead
+    // of creating a second identity for the same person.
+    const existing = await sql<{ phone: string }>`
+      select phone from phone_book
+      where phone_match(phone, ${raw})
+      order by (phone = ${raw}) desc, length(phone) desc
+      limit 1
+    `;
+    const phone = existing[0]?.phone ?? raw;
     await sql`
       insert into phone_book (phone, display_name, photo, last_seen)
       values (${phone}, ${name}, ${photo}, now())
@@ -1134,8 +1147,7 @@ export const searchDirectory = createServerFn({ method: "POST" })
     const qName = raw.toLowerCase().replace(/[%_+]/g, " ").replace(/\s+/g, " ").trim();
     const digits = raw.replace(/\D/g, "");
     const lookingPhone = digits.length >= 3;
-    const mine = (data.myPhone ?? "").replace(/\D/g, "");
-    const mineTail = mine.slice(-8);
+    const mine = normalizePhone(data.myPhone ?? "");
     const sql = await getSql();
     let book: Array<Record<string, unknown>> = [];
     try {
@@ -1174,7 +1186,7 @@ export const searchDirectory = createServerFn({ method: "POST" })
       if (/^you$|^someone$/i.test(name)) continue;
       const key = phone.replace(/\D/g, "").slice(-8) || `n:${name.toLowerCase()}`;
       if (seen.has(key)) continue;
-      if (mineTail.length >= 7 && key === mineTail) continue;
+      if (mine.length >= MIN_PHONE_DIGITS && phone && phonesMatch(phone, mine)) continue;
       if (qName || lookingPhone) {
         if (!(name && nameHit(name)) && !phoneHit(phone)) continue;
       }
@@ -1194,14 +1206,15 @@ export const searchDirectory = createServerFn({ method: "POST" })
         photo,
       });
     }
-    if (mineTail.length >= 7) {
+    if (mine.length >= MIN_PHONE_DIGITS) {
       try {
         const blocked = await sql<{ blocked_phone: string }>`
           select blocked_phone from phone_blocks
-          where right(blocker_phone, 8) = ${mineTail}
+          where phone_match(blocker_phone, ${mine})
         `;
-        const hide = new Set(blocked.map((b) => b.blocked_phone.replace(/\D/g, "").slice(-8)));
-        return out.filter((p) => !hide.has((p.phone ?? "").replace(/\D/g, "").slice(-8))).slice(0, 50);
+        return out
+          .filter((p) => !blocked.some((b) => p.phone && phonesMatch(b.blocked_phone, p.phone)))
+          .slice(0, 50);
       } catch {
         /* table missing */
       }
@@ -1212,63 +1225,54 @@ export const searchDirectory = createServerFn({ method: "POST" })
 export const sendPhoneKiss = createServerFn({ method: "POST" })
   .validator((data: { fromPhone: string; fromName: string; toPhone: string; count?: number; kind?: string }) => data)
   .handler(async ({ data }) => {
-    const fromPhone = normalizePhone(data.fromPhone);
-    const toPhone = normalizePhone(data.toPhone);
-    if (fromPhone.length < 8 || toPhone.length < 8) throw new Error("Need both numbers");
-    if (fromPhone === toPhone) throw new Error("Kiss someone else");
     const fromName = data.fromName.trim().slice(0, 32) || "Someone";
     const n = Math.min(69, Math.max(1, Math.floor(data.count ?? 1)));
     const kind = isKissKind(data.kind ?? "classic") ? (data.kind ?? "classic") : "classic";
     const sql = await getSql();
-    const tail = toPhone.slice(-8);
-    const target = await sql<{ phone: string; display_name: string }>`
-      select phone, display_name from phone_book
-      where phone = ${toPhone} or right(phone, 8) = ${tail}
-      limit 1
-    `;
-    const fromProfiles =
-      target[0]
-        ? []
-        : await sql<{ phone: string; display_name: string }>`
-            select phone, display_name from profiles
-            where phone is not null and (phone = ${toPhone} or right(phone, 8) = ${tail})
-            limit 1
-          `;
-    const hit = target[0] ?? fromProfiles[0];
-    if (!hit) throw new Error("They are not on KISS yet");
-    const to = normalizePhone(hit.phone);
+    // Both ends are written with the identity Neon already knows for them, so
+    // a QA client sending 1234 -> 5678 produces a row on 15550001234 -> 15550005678
+    // that every reader (inbox, counts, catch) matches the same way.
+    const from = await resolvePhoneIdentity(sql, data.fromPhone);
+    const to = await resolvePhoneIdentity(sql, data.toPhone);
+    if (from.phone.length < MIN_PHONE_DIGITS || to.phone.length < MIN_PHONE_DIGITS) {
+      throw new Error("Need both numbers");
+    }
+    if (phonesMatch(from.phone, to.phone)) throw new Error("Kiss someone else");
+    if (!to.known) throw new Error("They are not on KISS yet");
+    const toName = to.name || to.phone;
     const blocked = await sql<{ n: number }>`
       select 1 as n from phone_blocks
-      where right(blocker_phone, 8) = ${to.slice(-8)}
-        and right(blocked_phone, 8) = ${fromPhone.slice(-8)}
+      where phone_match(blocker_phone, ${to.phone})
+        and phone_match(blocked_phone, ${from.phone})
       limit 1
     `.catch(() => [] as Array<{ n: number }>);
     if (blocked.length > 0) {
-      return { id: 0, count: n, toName: hit.display_name || to, toPhone: to };
+      return { id: 0, count: n, toName, toPhone: to.phone };
     }
     const inserted = await sql<{ id: number }>`
       insert into phone_kisses (from_phone, from_name, to_phone, kind, n)
-      values (${fromPhone}, ${fromName}, ${to}, ${kind}, ${n})
+      values (${from.phone}, ${fromName}, ${to.phone}, ${kind}, ${n})
       returning id
     `;
-    await sql`
-      insert into phone_book (phone, display_name, last_seen)
-      values (${fromPhone}, ${fromName}, now())
-      on conflict (phone) do update set last_seen = now()
-    `;
-    return {
-      id: Number(inserted[0]?.id),
-      count: n,
-      toName: hit.display_name || to,
-      toPhone: to,
-    };
+    const id = Number(inserted[0]?.id);
+    if (!id) throw new Error("Kiss did not save");
+    if (from.known) {
+      await sql`update phone_book set last_seen = now() where phone = ${from.phone}`;
+    } else {
+      await sql`
+        insert into phone_book (phone, display_name, last_seen)
+        values (${from.phone}, ${fromName}, now())
+        on conflict (phone) do update set last_seen = now()
+      `;
+    }
+    return { id, count: n, toName, toPhone: to.phone };
   });
 
 export const phoneInbox = createServerFn({ method: "POST" })
   .validator((phone: string) => phone)
   .handler(async ({ data: raw }) => {
     const phone = normalizePhone(raw);
-    if (phone.length < 8) return [];
+    if (phone.length < MIN_PHONE_DIGITS) return [];
     const sql = await getSql();
     const rows = await sql<{
       id: number;
@@ -1282,14 +1286,12 @@ export const phoneInbox = createServerFn({ method: "POST" })
       select pk.id, pk.from_phone, pk.from_name, pk.kind, pk.n, pk.created_at::text as created_at,
         (
           select photo from phone_book
-          where photo is not null and right(phone, 8) = right(pk.from_phone, 8)
+          where photo is not null and phone_match(phone, pk.from_phone)
+          order by length(phone) desc
           limit 1
         ) as photo
       from phone_kisses pk
-      where (pk.to_phone = ${phone} 
-         or right(pk.to_phone, 8) = right(${phone}, 8)
-         or (length(pk.to_phone) <= 8 and ${phone} like '%' || pk.to_phone)
-         or (length(${phone}) <= 8 and pk.to_phone like '%' || ${phone}))
+      where phone_match(pk.to_phone, ${phone})
         and pk.caught_at is null
       order by pk.created_at desc
       limit 30
@@ -1303,17 +1305,16 @@ export const phoneInbox = createServerFn({ method: "POST" })
       createdAt: r.created_at,
       photo: r.photo && r.photo.startsWith("data:") ? r.photo : null,
     }));
-    let hide = new Set<string>();
+    let blocked: Array<{ blocked_phone: string }> = [];
     try {
-      const blocked = await sql<{ blocked_phone: string }>`
+      blocked = await sql<{ blocked_phone: string }>`
         select blocked_phone from phone_blocks
-        where right(blocker_phone, 8) = ${phone.slice(-8)}
+        where phone_match(blocker_phone, ${phone})
       `;
-      hide = new Set(blocked.map((b) => b.blocked_phone.replace(/\D/g, "").slice(-8)));
     } catch {
-      hide = new Set();
+      blocked = [];
     }
-    return mapped.filter((r) => !hide.has(r.fromPhone.replace(/\D/g, "").slice(-8)));
+    return mapped.filter((r) => !blocked.some((b) => phonesMatch(b.blocked_phone, r.fromPhone)));
   });
 
 export const catchPhoneKiss = createServerFn({ method: "POST" })
@@ -1356,7 +1357,8 @@ export const kissStream = createServerFn({ method: "GET" }).handler(async (): Pr
       pk.from_name,
       (
         select display_name from phone_book
-        where right(phone, 8) = right(pk.to_phone, 8)
+        where phone_match(phone, pk.to_phone)
+        order by length(phone) desc
         limit 1
       ) as to_name,
       pk.n,
@@ -1411,17 +1413,14 @@ export const lookupFace = createServerFn({ method: "POST" })
   .validator((data: { name?: string; phone?: string }) => data)
   .handler(async ({ data }) => {
     const sql = await getSql();
-    const rawPhone = (data.phone ?? "").replace(/\D/g, "");
-    const phone = normalizePhone(rawPhone);
+    const phone = normalizePhone(data.phone ?? "");
     const photo = await findPhoto(sql, phone, data.name ?? null);
     let name = "";
-    if (phone.length >= 4) {
+    if (phone.length >= MIN_PHONE_DIGITS) {
       const rows = await sql<{ display_name: string }>`
         select display_name from phone_book
-        where (phone = ${phone}
-           or right(phone, 8) = right(${phone}, 8)
-           or (length(phone) <= 8 and ${phone} like '%' || phone)
-           or (length(${phone}) <= 8 and phone like '%' || ${phone}))
+        where phone_match(phone, ${phone})
+        order by (phone = ${phone}) desc, length(phone) desc
         limit 1
       `.catch(() => []);
       name = rows[0]?.display_name?.trim() || "";
@@ -1434,8 +1433,8 @@ export const blockPhone = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const me = normalizePhone(data.myPhone);
     const them = normalizePhone(data.theirPhone ?? "");
-    if (me.length < 8 || them.length < 8) return { ok: true as const };
-    if (me.slice(-8) === them.slice(-8)) return { ok: true as const };
+    if (me.length < MIN_PHONE_DIGITS || them.length < MIN_PHONE_DIGITS) return { ok: true as const };
+    if (phonesMatch(me, them)) return { ok: true as const };
     const name = (data.theirName ?? "").trim().slice(0, 32);
     const sql = await getSql();
     await sql`
@@ -1451,12 +1450,12 @@ export const unblockPhone = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const me = normalizePhone(data.myPhone);
     const them = normalizePhone(data.theirPhone);
-    if (me.length < 8 || them.length < 8) return { ok: true as const };
+    if (me.length < MIN_PHONE_DIGITS || them.length < MIN_PHONE_DIGITS) return { ok: true as const };
     const sql = await getSql();
     await sql`
       delete from phone_blocks
-      where right(blocker_phone, 8) = ${me.slice(-8)}
-        and right(blocked_phone, 8) = ${them.slice(-8)}
+      where phone_match(blocker_phone, ${me})
+        and phone_match(blocked_phone, ${them})
     `;
     return { ok: true as const };
   });
@@ -1465,12 +1464,12 @@ export const listBlocks = createServerFn({ method: "POST" })
   .validator((myPhone: string) => myPhone)
   .handler(async ({ data: raw }) => {
     const me = normalizePhone(raw);
-    if (me.length < 8) return [];
+    if (me.length < MIN_PHONE_DIGITS) return [];
     const sql = await getSql();
     try {
       const rows = await sql<{ blocked_phone: string; blocked_name: string }>`
         select blocked_phone, blocked_name from phone_blocks
-        where right(blocker_phone, 8) = ${me.slice(-8)}
+        where phone_match(blocker_phone, ${me})
         order by created_at desc
       `;
       return rows.map((r) => ({ tel: r.blocked_phone, name: r.blocked_name || r.blocked_phone }));
@@ -1485,7 +1484,7 @@ export const saveNick = createServerFn({ method: "POST" })
     const me = normalizePhone(data.myPhone);
     const them = normalizePhone(data.theirPhone);
     const nick = data.nick.trim().slice(0, 24);
-    if (me.length < 8 || them.length < 8 || !nick) return { ok: true as const };
+    if (me.length < MIN_PHONE_DIGITS || them.length < MIN_PHONE_DIGITS || !nick) return { ok: true as const };
     const sql = await getSql();
     await sql`
       insert into phone_nicks (owner_phone, target_phone, nick, owner_name)
@@ -1499,12 +1498,12 @@ export const listNicks = createServerFn({ method: "POST" })
   .validator((myPhone: string) => myPhone)
   .handler(async ({ data: raw }): Promise<Array<{ from: string; nick: string }>> => {
     const me = normalizePhone(raw);
-    if (me.length < 8) return [];
+    if (me.length < MIN_PHONE_DIGITS) return [];
     const sql = await getSql();
     try {
       const rows = await sql<{ owner_name: string; nick: string }>`
         select owner_name, nick from phone_nicks
-        where right(target_phone, 8) = ${me.slice(-8)}
+        where phone_match(target_phone, ${me})
         order by created_at desc
         limit 24
       `;

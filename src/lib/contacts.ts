@@ -1,3 +1,5 @@
+import { normalizePhone } from "./phone";
+
 export type PhoneContact = {
   name: string;
   tel: string;
@@ -127,18 +129,15 @@ export function prettyPersonName(raw: string): string {
   return t.slice(0, 24);
 }
 
+export { isPhoneIdentity, isValidPhone } from "./phone";
+
 export function phoneDigits(raw: string): string {
   return waPhone(raw);
 }
 
 /** WhatsApp wants country code + number, no +, no 0, no dashes. */
 export function waPhone(raw: string): string {
-  let d = raw.replace(/\D/g, "");
-  if (d.startsWith("00")) d = d.slice(2);
-  if (d.startsWith("9720")) d = `972${d.slice(4)}`;
-  if (d.startsWith("0") && d.length >= 9 && d.length <= 11) d = `972${d.slice(1)}`;
-  if (!d.startsWith("972") && d.length === 9 && d.startsWith("5")) d = `972${d}`;
-  return d;
+  return normalizePhone(raw);
 }
 
 export function formatPhone(raw: string): { display: string; country: string } {
@@ -163,11 +162,6 @@ export function formatPhone(raw: string): { display: string; country: string } {
     return { display: `+44 ${d.slice(2)}`, country: "UK" };
   }
   return { display: `+${d}`, country: "" };
-}
-
-export function isValidPhone(raw: string): boolean {
-  const d = waPhone(raw);
-  return d.length >= 8 && d.length <= 15;
 }
 
 export function waHref(tel: string, text: string): string {
