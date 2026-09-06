@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { getHome, phoneInbox } from "@/lib/kisses/server";
+import { isPhoneIdentity } from "@/lib/phone";
 import { queryClient } from "@/lib/query-client";
 
 export const HOME_KEY = ["home"] as const;
@@ -15,7 +16,8 @@ export function useHome(enabled = true) {
 }
 
 export function usePhoneInbox(phone: string) {
-  const enabled = phone.replace(/\D/g, "").length >= 8;
+  // Short QA identities (1234) are valid inbox keys; the server resolves them.
+  const enabled = isPhoneIdentity(phone);
   return useQuery({
     queryKey: [...PHONE_INBOX_KEY, phone],
     queryFn: () => phoneInbox({ data: phone }),

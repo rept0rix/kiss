@@ -27,7 +27,8 @@ export function PersonSheet({
 }: {
   item: OrbitItem;
   onClose: () => void;
-  onKiss: () => void;
+  /** Resolve `false` when the kiss did not go out; the sheet then does not count it. */
+  onKiss: () => void | boolean | Promise<void | boolean>;
   onBlock: () => void;
   busy?: boolean;
   myPhone?: string;
@@ -95,8 +96,9 @@ export function PersonSheet({
           className="person-kiss"
           disabled={busy || blocked}
           onClick={() => {
-            setSentNow((n) => n + 1);
-            onKiss();
+            void Promise.resolve(onKiss()).then((ok) => {
+              if (ok !== false) setSentNow((n) => n + 1);
+            });
           }}
         >
           {busy ? "…" : sentNow > 0 ? `Kiss · ${sentNow}` : "Kiss"}

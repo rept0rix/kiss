@@ -1,12 +1,12 @@
 import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { BootSplash } from "@/components/boot-splash";
 import { CatchScreen } from "@/components/catch-screen";
 import { ConfettiBurst } from "@/components/confetti-burst";
 import { KissOrbit } from "@/components/kiss-orbit";
 import { KissSky } from "@/components/kiss-sky";
 import { LiveKiss } from "@/components/live-kiss";
-import { LoginRain } from "@/components/login-rain";
 import { Confirm } from "@/components/confirm";
 import { MyProfile, rememberPhoto } from "@/components/my-profile";
 import { PersonSheet } from "@/components/person-sheet";
@@ -23,7 +23,7 @@ import { blockPhone, catchKiss, catchPhoneKiss, lookupFace, registerPhone, searc
 import { isLive } from "@/lib/kisses/online";
 import { nextRank, rankAt } from "@/lib/kisses/ranks";
 import type { HomePayload, OrbitItem } from "@/lib/kisses/types";
-import { formatPhone, isValidPhone, loadRecents, phoneDigits, prettyPersonName, shrinkDataUrl } from "@/lib/contacts";
+import { formatPhone, isPhoneIdentity, isValidPhone, loadRecents, phoneDigits, prettyPersonName, shrinkDataUrl } from "@/lib/contacts";
 import { blockLocal, isBlocked, unblockLocal } from "@/lib/block";
 import { addPhoto, loadGallery, saveGallery } from "@/lib/gallery";
 import { cropPhoto, loadMe, saveMe, type MeState } from "@/lib/me";
@@ -33,6 +33,27 @@ import { canSuper, consumeSuper, openSuperWindow, superState } from "@/lib/super
 import { Settings, Volume2, VolumeX } from "lucide-react";
 
 type Search = { k?: string; p?: string };
+
+type QueueItem = {
+  from: string;
+  photo?: string | null;
+  first: boolean;
+  count: number;
+  skin?: string | null;
+  canReply?: boolean;
+  inbound?: boolean;
+  tel?: string;
+  kissIds?: number[];
+  phoneKissIds?: number[];
+};
+
+/** getHome folds phone kisses into the inbox with their id offset by this much. */
+const PHONE_ID_OFFSET = 1000000;
+
+/** One key per kiss row, whichever feed it arrived on, so it is queued once. */
+function inboxKey(id: number): string {
+  return id >= PHONE_ID_OFFSET ? `p:${id - PHONE_ID_OFFSET}` : `u:${id}`;
+}
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -50,24 +71,38 @@ function Home() {
   const [burst, setBurst] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const [sendTarget, setSendTarget] = useState<SendTarget | null>(null);
-  const [queue, setQueue] = useState<
-    Array<{
-      from: string;
-      photo?: string | null;
-      first: boolean;
-      count: number;
-      skin?: string | null;
-      canReply?: boolean;
-      inbound?: boolean;
-      tel?: string;
-      kissIds?: number[];
-      phoneKissIds?: number[];
-    }>
-  >([]);
+  const [queue, setQueue] = useState<QueueItem[]>([]);
   const live = queue[0] ?? null;
+  // Kisses already turned into a card this session. Deliberately not persisted:
+  // an uncaught kiss must come back after a reload until Close writes caught_at.
+  const seenRef = useRef<Set<string>>(new Set());
 
   function nextLive() {
     setQueue((q) => q.slice(1));
+  }
+
+  function enqueue(items: QueueItem[]) {
+    setQueue((q) => {
+      const next = [...q];
+      for (const item of items) {
+        const i = next.findIndex((x) => x.from === item.from);
+        if (i === -1) {
+          next.push(item);
+          continue;
+        }
+        // Same sender already has a card: fold the new kisses into it so Close
+        // catches all of them instead of silently dropping the newcomers.
+        const cur = next[i]!;
+        next[i] = {
+          ...cur,
+          count: cur.count + item.count,
+          photo: cur.photo ?? item.photo,
+          kissIds: [...(cur.kissIds ?? []), ...(item.kissIds ?? [])],
+          phoneKissIds: [...(cur.phoneKissIds ?? []), ...(item.phoneKissIds ?? [])],
+        };
+      }
+      return next;
+    });
   }
   const [person, setPerson] = useState<OrbitItem | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -80,7 +115,7 @@ function Home() {
   const [draftName, setDraftName] = useState("");
   const [draftPhone, setDraftPhone] = useState("");
   const [superTick, setSuperTick] = useState(0);
-  const [liveOpened, setLiveOpened] = useState<number | null>(null);
+  const [personBusy, setPersonBusy] = useState(false);
   const liveUser = user && !user.isDevFallback ? user : null;
   const home = useHome(Boolean(liveUser));
   const phoneBox = usePhoneInbox(me.phone);
@@ -178,11 +213,10 @@ function Home() {
 
   useEffect(() => {
     const inbox = home.data?.inbox ?? [];
-    const fresh = inbox.filter((k) => !k.caughtAt && k.id > me.lastInboxId);
+    const fresh = inbox.filter((k) => !k.caughtAt && !seenRef.current.has(inboxKey(k.id)));
     if (fresh.length === 0) return;
-    const maxId = Math.max(...fresh.map((k) => k.id));
+    for (const k of fresh) seenRef.current.add(inboxKey(k.id));
     const first = me.received === 0;
-    patch({ lastInboxId: maxId });
     const grouped = new Map<string, typeof fresh>();
     for (const k of fresh) {
       const list = grouped.get(k.fromName) ?? [];
@@ -203,10 +237,7 @@ function Home() {
     notifyKiss(next[0]?.from ?? "Someone");
     askNotify();
     openSuperWindow();
-    setQueue((q) => {
-      const names = new Set(q.map((x) => x.from));
-      return [...q, ...next.filter((x) => !names.has(x.from))];
-    });
+    enqueue(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [home.data?.inbox]);
 
@@ -225,11 +256,12 @@ function Home() {
 
   useEffect(() => {
     const inbox = phoneBox.data ?? [];
-    const fresh = inbox.filter((k) => k.id > me.lastPhoneId && !isBlocked(k.fromName, k.fromPhone));
+    const fresh = inbox.filter(
+      (k) => !seenRef.current.has(`p:${k.id}`) && !isBlocked(k.fromName, k.fromPhone),
+    );
     if (fresh.length === 0) return;
-    const maxId = Math.max(...fresh.map((k) => k.id));
+    for (const k of fresh) seenRef.current.add(`p:${k.id}`);
     const first = me.received === 0;
-    patch({ lastPhoneId: maxId });
     const grouped = new Map<string, typeof fresh>();
     for (const k of fresh) {
       const list = grouped.get(k.fromName) ?? [];
@@ -255,22 +287,11 @@ function Home() {
     notifyKiss(next[0]?.from ?? "Someone");
     askNotify();
     openSuperWindow();
-    setQueue((q) => {
-      const names = new Set(q.map((x) => x.from));
-      return [...q, ...next.filter((x) => !names.has(x.from))];
-    });
+    enqueue(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phoneBox.data]);
 
   const orbit = useMemo(() => mergeOrbit(me.orbit, home.data), [me.orbit, home.data]);
-
-  useEffect(() => {
-    if (live) {
-      setLiveOpened(Date.now());
-    } else {
-      setLiveOpened(null);
-    }
-  }, [live]);
 
   useEffect(() => {
     const id = window.setInterval(() => setSuperTick((n) => n + 1), 500);
@@ -821,13 +842,42 @@ function Home() {
       {person ? (
         <PersonSheet
           item={person}
-          busy={false}
+          busy={personBusy}
           myPhone={me.phone}
           myName={me.name}
           onClose={() => setPerson(null)}
-          onKiss={() => {
+          onKiss={async () => {
             const who = person;
             const tel = who.tel;
+            const appUser = who.userId && !who.userId.includes(":") ? who.userId : null;
+            // Nothing is counted until Neon has the row. A failed send shows
+            // why instead of quietly leaving a kiss that never existed.
+            let request: Promise<unknown>;
+            if (appUser && liveUser) {
+              request = sendKiss({ data: { toUserId: appUser, kind: rankAt(sent).skin } });
+            } else if (tel && isPhoneIdentity(me.phone) && isPhoneIdentity(tel)) {
+              request = sendPhoneKiss({
+                data: {
+                  fromPhone: me.phone,
+                  fromName: me.name,
+                  toPhone: tel,
+                  count: 1,
+                  kind: rankAt(sent).skin,
+                },
+              });
+            } else {
+              toast.error(tel ? "Add your phone first" : "No number for them yet");
+              return false;
+            }
+            setPersonBusy(true);
+            try {
+              await request;
+            } catch (err) {
+              toast.error(err instanceof Error ? err.message : "Kiss didn't send");
+              return false;
+            } finally {
+              setPersonBusy(false);
+            }
             celebrate(1);
             setMe((prev) => {
               const next = {
@@ -845,17 +895,8 @@ function Home() {
             setPerson((p) =>
               p ? { ...p, fromMe: (p.fromMe ?? 0) + 1, lastOut: Date.now() } : p,
             );
-            if (tel && isValidPhone(me.phone) && isValidPhone(tel)) {
-              void sendPhoneKiss({
-                data: {
-                  fromPhone: me.phone,
-                  fromName: me.name,
-                  toPhone: tel,
-                  count: 1,
-                  kind: rankAt(sent).skin,
-                },
-              }).catch(() => undefined);
-            }
+            void invalidateHome();
+            return true;
           }}
           onBlock={() => {
             const who = person;
@@ -886,25 +927,28 @@ function Home() {
           superMs={superState().windowMs}
           more={queue.length > 1}
           onClose={() => {
-            const elapsed = liveOpened ? Date.now() - liveOpened : 0;
-            if (elapsed < 300) {
-              nextLive();
-              return;
-            }
-            if (live.kissIds && live.kissIds.length > 0) {
-              for (const id of live.kissIds) {
-                void catchKiss({ data: id }).then(() => invalidateHome());
-              }
-            }
-            if (live.phoneKissIds && live.phoneKissIds.length > 0) {
-              for (const id of live.phoneKissIds) {
-                void catchPhoneKiss({ data: id }).then(() => {
-                  invalidatePhoneInbox();
-                  invalidateHome();
-                });
-              }
-            }
+            // Close is the catch. Every kiss on this card gets caught_at, no
+            // matter how quickly the card was dismissed.
+            const card = live;
+            const catches = [
+              ...(card.kissIds ?? []).map((id) => catchKiss({ data: id })),
+              ...(card.phoneKissIds ?? []).map((id) => catchPhoneKiss({ data: id })),
+            ];
             nextLive();
+            if (catches.length === 0) return;
+            void Promise.allSettled(catches).then((results) => {
+              if (results.some((r) => r.status === "fulfilled")) {
+                setMe((prev) => {
+                  const next = { ...prev, received: prev.received + card.count };
+                  saveMe(next);
+                  return next;
+                });
+              } else {
+                toast.error("Couldn't mark it caught — it will come back");
+              }
+              void invalidatePhoneInbox();
+              void invalidateHome();
+            });
           }}
           onReply={() => {
             const from = live.from;
