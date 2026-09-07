@@ -71,6 +71,14 @@ export type HomePayload = {
   people: PublicPerson[];
 };
 
+/** Kiss totals for one phone identity, straight from phone_kisses (no sign-in needed). */
+export type PhoneStats = {
+  sentToday: number;
+  receivedToday: number;
+  sentAll: number;
+  receivedAll: number;
+};
+
 export type OrbitItem = {
   id: string;
   dir: "in" | "out";

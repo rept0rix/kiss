@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useKeyboardInset } from "@/hooks/use-keyboard";
 import {
   canPickContacts,
+  isPhoneIdentity,
   isValidPhone,
   loadRecents,
   openWhatsApp,
@@ -193,9 +194,25 @@ export function SendSheet({
     onClose();
   }
 
+  /** Send to each number in turn; returns how many kisses Neon actually saved. */
+  async function kissMany(phones: string[]): Promise<number> {
+    let saved = 0;
+    for (const toPhone of phones) {
+      try {
+        await sendPhoneKiss({
+          data: { fromPhone: myPhone, fromName: myName, toPhone, count: 1, kind: rankAt(mySent).skin },
+        });
+        saved += 1;
+      } catch {
+        /* not on KISS — skip, but do not count it */
+      }
+    }
+    return saved;
+  }
+
   function kissPerson(person: PublicPerson, count = 1) {
     const toPhone = person.phone || tel;
-    if (!isValidPhone(myPhone)) {
+    if (!isPhoneIdentity(myPhone)) {
       setError("Add your phone first");
       return;
     }
@@ -288,26 +305,16 @@ export function SendSheet({
                   disabled={busy}
                   onClick={() => {
                     setBusy(true);
+                    setError(null);
                     void (async () => {
-                      for (const m of g.members) {
-                        if (!m.tel && !m.userId) continue;
-                        try {
-                          if (m.tel) {
-                            await sendPhoneKiss({
-                              data: {
-                                fromPhone: myPhone,
-                                fromName: myName,
-                                toPhone: m.tel,
-                                count: 1,
-                                kind: rankAt(mySent).skin,
-                              },
-                            });
-                          }
-                        } catch {
-                          /* skip missing */
-                        }
+                      const saved = await kissMany(
+                        g.members.map((m) => m.tel).filter((t): t is string => Boolean(t)),
+                      );
+                      if (saved === 0) {
+                        setError("Nobody in that group is on KISS yet");
+                        return;
                       }
-                      onSent({ name: g.name, status: "waiting", count: g.members.length });
+                      onSent({ name: g.name, status: "waiting", count: saved });
                       onClose();
                     })().finally(() => setBusy(false));
                   }}
@@ -366,24 +373,16 @@ export function SendSheet({
               onClick={() => {
                 const members = shown.filter((h) => picked.has(h.userId));
                 setBusy(true);
+                setError(null);
                 void (async () => {
-                  for (const m of members) {
-                    if (!m.phone) continue;
-                    try {
-                      await sendPhoneKiss({
-                        data: {
-                          fromPhone: myPhone,
-                          fromName: myName,
-                          toPhone: m.phone,
-                          count: 1,
-                          kind: rankAt(mySent).skin,
-                        },
-                      });
-                    } catch {
-                      /* skip */
-                    }
+                  const saved = await kissMany(
+                    members.map((m) => m.phone).filter((p): p is string => Boolean(p)),
+                  );
+                  if (saved === 0) {
+                    setError("None of them are on KISS yet");
+                    return;
                   }
-                  onSent({ name: `${members.length} people`, status: "waiting", count: members.length });
+                  onSent({ name: `${saved} people`, status: "waiting", count: saved });
                   onClose();
                 })().finally(() => setBusy(false));
               }}

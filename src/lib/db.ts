@@ -19,6 +19,24 @@ const databaseUrl =
 export const dbSource: DbSource = databaseUrl ? "neon" : "pglite";
 
 /**
+ * Non-secret name of the database this process actually talks to, for the
+ * Settings sheet and the boot log: the Neon endpoint id (`ep-…`, which maps to
+ * exactly one Neon branch — Vercel previews each get their own branch), a bare
+ * hostname for other Postgres, or "pglite" for the in-memory preview DB.
+ */
+export const dbLabel: string = databaseUrl ? endpointLabel(databaseUrl) : "pglite";
+
+function endpointLabel(url: string): string {
+  try {
+    const host = new URL(url).hostname;
+    const first = host.split(".")[0] ?? host;
+    return first.replace(/-pooler$/, "") || host;
+  } catch {
+    return "postgres";
+  }
+}
+
+/**
  * Minimal shared SQL surface, satisfied by both Neon and PGLite. Both the
  * tagged-template and `.query()` forms resolve to an array of row objects:
  *
@@ -94,6 +112,7 @@ function createNeonSql(): Promise<Sql> {
     types.setTypeParser(OID_DATE, identity);
     types.setTypeParser(OID_INTERVAL, identity);
     const pool = new Pool({ connectionString: databaseUrl });
+    console.log(`[db] backend: neon (${dbLabel})`);
     return toSql(async <T>(text: string, params: unknown[]) => {
       const res = await pool.query(text, params);
       return res.rows as T[];
@@ -122,6 +141,7 @@ async function createPgliteSql(): Promise<Sql> {
     await pg.exec(
       "create table if not exists _migrations (name text primary key, applied_at timestamptz not null default now())",
     );
+    console.log("[db] backend: pglite (in-memory, resets on restart)");
     return pg;
   })().catch((err) => {
     globalRef.__pgliteInstance__ = undefined;
