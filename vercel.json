@@ -1,0 +1,15 @@
+{
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "kiss-pied.vercel.app"
+        }
+      ],
+      "destination": "https://app.sendkiss.online/:path*",
+      "permanent": true
+    }
+  ]
+}
