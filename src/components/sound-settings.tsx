@@ -1,6 +1,7 @@
 import { getSoundPrefs, setSoundPrefs, unlockSound } from "@/lib/sound";
 import { loadBlocks, unblockLocal, type BlockedPerson } from "@/lib/block";
 import { authEnabled, signOut } from "@/lib/auth/client";
+import { leaveLocalSession } from "@/lib/me";
 import { getRuntimeInfo, unblockPhone } from "@/lib/kisses/server";
 import { useEffect, useState } from "react";
 
@@ -18,6 +19,7 @@ export function SoundSettings({
   const [prefs, setPrefs] = useState(getSoundPrefs);
   const [blocked, setBlocked] = useState<BlockedPerson[]>(() => loadBlocks());
   const [runtime, setRuntime] = useState<{ db: string; label: string } | null>(null);
+  const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -44,6 +46,22 @@ export function SoundSettings({
   function toggle(key: "kisses" | "hearts" | "music") {
     unlockSound();
     setPrefs(setSoundPrefs({ [key]: !prefs[key] }));
+  }
+
+  async function onLeave() {
+    if (leaving) return;
+    setLeaving(true);
+    // Clear identity before redirect so the phone gate wins on reload.
+    leaveLocalSession();
+    if (authEnabled) {
+      try {
+        await signOut("/");
+        return;
+      } catch {
+        /* fall through to hard reload if auth sign-out fails */
+      }
+    }
+    window.location.href = "/";
   }
 
   return (
@@ -93,27 +111,10 @@ export function SoundSettings({
             ))}
           </ul>
         )}
-        {authEnabled ? (
-          <button
-            type="button"
-            className="sound-row"
-            onClick={async () => {
-              try {
-                await signOut();
-              } catch {
-                /* ignore - signOut handles its own errors */
-              }
-              try {
-                window.localStorage.clear();
-              } catch {
-                /* ignore */
-              }
-            }}
-          >
-            <span>Log out</span>
-            <span className="sound-off">Leave</span>
-          </button>
-        ) : null}
+        <button type="button" className="sound-row" disabled={leaving} onClick={() => void onLeave()}>
+          <span>Log out</span>
+          <span className="sound-off">{leaving ? "…" : "Leave"}</span>
+        </button>
         {onDelete ? (
           <button type="button" className="live-block mt-6" onClick={onDelete}>
             Delete me
