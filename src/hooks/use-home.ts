@@ -1,11 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import { getHome, phoneInbox, phoneStats } from "@/lib/kisses/server";
+import { getHome, phoneHome, phoneInbox, phoneStats } from "@/lib/kisses/server";
 import { isPhoneIdentity } from "@/lib/phone";
 import { queryClient } from "@/lib/query-client";
 
 export const HOME_KEY = ["home"] as const;
 export const PHONE_INBOX_KEY = ["phone-inbox"] as const;
 export const PHONE_STATS_KEY = ["phone-stats"] as const;
+export const PHONE_HOME_KEY = ["phone-home"] as const;
 
 export function useHome(enabled = true) {
   return useQuery({
@@ -38,6 +39,17 @@ export function usePhoneStats(phone: string) {
   });
 }
 
+/** Inbox + sent for phone-only orbit hydrate (Neon phone_kisses, not localStorage). */
+export function usePhoneHome(phone: string) {
+  const enabled = isPhoneIdentity(phone);
+  return useQuery({
+    queryKey: [...PHONE_HOME_KEY, phone],
+    queryFn: () => phoneHome({ data: phone }),
+    enabled,
+    refetchInterval: enabled ? 4000 : false,
+  });
+}
+
 export function invalidateHome() {
   return queryClient.invalidateQueries({ queryKey: HOME_KEY });
 }
@@ -47,5 +59,6 @@ export function invalidatePhoneInbox() {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: PHONE_INBOX_KEY }),
     queryClient.invalidateQueries({ queryKey: PHONE_STATS_KEY }),
+    queryClient.invalidateQueries({ queryKey: PHONE_HOME_KEY }),
   ]);
 }
