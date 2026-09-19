@@ -111,6 +111,8 @@ npm run typecheck
 npm run build          # also applies migrations when DATABASE_URL is set
 ```
 
+**Native (Capacitor):** see [`docs/NATIVE.md`](docs/NATIVE.md) — iOS/Android shell + contacts picker.
+
 **Published:** set `DATABASE_URL` to a Neon (or any Postgres) connection string. Preview without it uses a throwaway local DB.
 
 **Auth:** Google and X go through the app's Better Auth broker. Leave `VITE_AUTH_ENABLED=false` for phone-only.

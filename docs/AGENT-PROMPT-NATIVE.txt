@@ -1,0 +1,5 @@
+Read docs/NATIVE-WRAP-BRIEF.md and implement that slice.
+Priority: native wrap with contacts access for sending kisses.
+Prefer Capacitor (or justify Expo) with minimal rewrite of the existing Vite app.
+Do not merge to production. Do not spend money or open store accounts.
+When done: branch/PR + short Hebrew note how Naor runs it on his phone.
