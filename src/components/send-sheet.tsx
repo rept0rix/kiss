@@ -91,8 +91,23 @@ export function SendSheet({
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [groups, setGroups] = useState<KissGroup[]>(() => loadGroups());
   const [inviteText, setInviteText] = useState("");
-  const picker = canPickContacts();
+  const [picker, setPicker] = useState(() => canPickContacts());
   useKeyboardInset(open);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { Capacitor } = await import("@capacitor/core");
+        if (Capacitor.isNativePlatform()) {
+          setPicker(true);
+          return;
+        }
+      } catch {
+        /* web / SSR */
+      }
+      setPicker(canPickContacts());
+    })();
+  }, []);
 
   useEffect(() => {
     if (!open) {
@@ -240,7 +255,10 @@ export function SendSheet({
     if (!picker) return;
     try {
       const picked = await pickFromPhone();
-      if (picked.length === 0) return;
+      if (picked.length === 0) {
+        setError("No contact picked — allow Contacts, or run with CAP_SERVER_URL to this branch");
+        return;
+      }
       const first = picked[0];
       if (first) {
         setQuery(first.name);
@@ -281,19 +299,26 @@ export function SendSheet({
           </button>
         </div>
 
-        <Input
-          className="mt-2"
-          value={query}
-          onChange={(e) => {
-            const v = e.target.value;
-            setQuery(v);
-            setError(null);
-            if (isValidPhone(v)) setTel(v);
-          }}
-          placeholder="Name or phone — type to find"
-          autoComplete="off"
-          autoCorrect="off"
-        />
+        <div className="mt-2 flex items-center gap-2">
+          <Input
+            className="flex-1"
+            value={query}
+            onChange={(e) => {
+              const v = e.target.value;
+              setQuery(v);
+              setError(null);
+              if (isValidPhone(v)) setTel(v);
+            }}
+            placeholder="Name or phone — type to find"
+            autoComplete="off"
+            autoCorrect="off"
+          />
+          {picker ? (
+            <button type="button" className="invite-toggle shrink-0" onClick={() => void onPick()}>
+              Contacts
+            </button>
+          ) : null}
+        </div>
 
         {groups.length > 0 ? (
           <ul className="group-row mt-2">
@@ -408,11 +433,6 @@ export function SendSheet({
 
         {!onApp ? (
           <>
-            {picker ? (
-              <button type="button" className="invite-toggle" onClick={() => void onPick()}>
-                Contacts
-              </button>
-            ) : null}
             {hasPhone && query !== tel ? (
               <Input
                 className="mt-2"

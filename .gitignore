@@ -16,3 +16,11 @@ dist/
 .nitro/
 .tanstack/
 .wrangler/
+
+# Capacitor local
+ios/App/Pods/
+ios/App/Podfile.lock
+android/.gradle/
+android/app/build/
+android/build/
+*.xcuserstate

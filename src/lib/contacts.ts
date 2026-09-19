@@ -17,13 +17,54 @@ type ContactPickerNav = Navigator & {
 
 const RECENTS_KEY = "kiss-contacts-v1";
 
+async function isCapacitorNative(): Promise<boolean> {
+  try {
+    const { Capacitor } = await import("@capacitor/core");
+    return Capacitor.isNativePlatform();
+  } catch {
+    return false;
+  }
+}
+
 export function canPickContacts(): boolean {
   if (typeof window === "undefined") return false;
+  // Capacitor injects this on native WebViews before JS modules load.
+  const win = window as Window & { Capacitor?: { isNativePlatform?: () => boolean } };
+  if (win.Capacitor?.isNativePlatform?.()) return true;
   const nav = navigator as ContactPickerNav;
   return typeof nav.contacts?.select === "function";
 }
 
-export async function pickFromPhone(): Promise<PhoneContact[]> {
+async function nativePick(): Promise<PhoneContact[] | null> {
+  try {
+    const { Capacitor } = await import("@capacitor/core");
+    if (!Capacitor.isNativePlatform()) return null;
+    const { CapacitorContacts, ContactProperty } = await import(
+      "@capgo/capacitor-contacts"
+    );
+    // Phone picker avoids full READ_CONTACTS when possible (Android policy).
+    const result = await CapacitorContacts.pickContacts({
+      property: ContactProperty.PhoneNumber,
+    });
+    const out: PhoneContact[] = [];
+    for (const c of (result.contacts ?? []).slice(0, 40)) {
+      const name = (c.displayName || "Someone").trim() || "Someone";
+      const tel = (
+        c.phoneNumbers?.[0]?.value ||
+        c.phoneNumbers?.[0]?.number ||
+        ""
+      ).trim();
+      const picked = { name, tel, photo: null as string | null };
+      rememberContact(picked);
+      out.push(picked);
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+async function webPick(): Promise<PhoneContact[]> {
   const nav = navigator as ContactPickerNav;
   if (!nav.contacts?.select) return [];
   let rows: Array<{ name?: string[]; tel?: string[]; icon?: Blob[] }> = [];
@@ -46,6 +87,19 @@ export async function pickFromPhone(): Promise<PhoneContact[]> {
     out.push(picked);
   }
   return out;
+}
+
+export async function pickFromPhone(): Promise<PhoneContact[]> {
+  const native = await nativePick();
+  if (native !== null) return native;
+  return webPick();
+}
+
+/** Prefer calling this once on mount if you need an accurate async native check. */
+export async function canPickContactsAsync(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  if (await isCapacitorNative()) return true;
+  return canPickContacts();
 }
 
 export function nameHue(name: string): number {
