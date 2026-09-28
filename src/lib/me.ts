@@ -102,6 +102,41 @@ export function saveMe(next: MeState): void {
   }
 }
 
+/** Drop the phone identity cache so the next boot shows the phone gate. */
+export function clearMe(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(KEY);
+  } catch {
+    /* ignore */
+  }
+  try {
+    window.localStorage.removeItem(ID_KEY);
+  } catch {
+    /* ignore */
+  }
+  try {
+    window.localStorage.removeItem("kiss-me-v1");
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * LEAVE: wipe local session state and return to the phone gate.
+ * Call this before auth signOut (if any). Keep the wipe narrow — only KISS
+ * identity keys — so sound prefs / blocks can survive if you want them to.
+ */
+export function leaveLocalSession(): void {
+  clearMe();
+  // TODO(you): decide whether Leave also clears gallery / recents / blocks.
+  // clearMe() already drops kiss-me-v2 + kiss-id-v1 (enough for the phone gate).
+  // If Leave should feel like a full device wipe, also remove:
+  //   kiss-gallery-*, kiss-recents-*, kiss-blocks-*, kiss-nicks-*, kiss-super-*, kiss-sound-*
+  // Trade-off: full wipe is cleaner across devices; keeping prefs is nicer for
+  // someone who only wants to switch phone numbers on this device.
+}
+
 export function cropPhoto(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();

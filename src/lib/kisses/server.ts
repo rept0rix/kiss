@@ -1334,6 +1334,83 @@ export const phoneStats = createServerFn({ method: "POST" })
   });
 
 /**
+ * Orbit source for phone-only sessions (no OAuth profile / getHome).
+ * Built only from phone_kisses + phone_book — never from client localStorage.
+ */
+export const phoneHome = createServerFn({ method: "POST" })
+  .validator((phone: string) => phone)
+  .handler(async ({ data: raw }): Promise<{ inbox: KissRow[]; sent: SentKiss[] }> => {
+    const phone = normalizePhone(raw);
+    if (phone.length < MIN_PHONE_DIGITS) return { inbox: [], sent: [] };
+    const sql = await getSql();
+
+    const inboxRows = await sql<{
+      id: number;
+      from_phone: string;
+      from_name: string;
+      kind: string;
+      n: number;
+      created_at: string;
+      caught_at: string | null;
+    }>`
+      select pk.id, pk.from_phone, pk.from_name, pk.kind, pk.n,
+             pk.created_at::text as created_at,
+             pk.caught_at::text as caught_at
+      from phone_kisses pk
+      where phone_match(pk.to_phone, ${phone})
+      order by pk.created_at desc
+      limit 40
+    `.catch(() => []);
+
+    const sentRows = await sql<{
+      id: number;
+      to_phone: string;
+      to_name: string;
+      kind: string;
+      n: number;
+      created_at: string;
+      caught_at: string | null;
+    }>`
+      select pk.id, pk.to_phone,
+             coalesce(
+               (select display_name from phone_book where phone_match(phone, pk.to_phone) limit 1),
+               pk.to_phone
+             ) as to_name,
+             pk.kind, pk.n,
+             pk.created_at::text as created_at,
+             pk.caught_at::text as caught_at
+      from phone_kisses pk
+      where phone_match(pk.from_phone, ${phone})
+      order by pk.created_at desc
+      limit 20
+    `.catch(() => []);
+
+    const inbox: KissRow[] = inboxRows.map((r) => ({
+      id: Number(r.id) + 1000000,
+      fromUserId: `p:${r.from_phone}`,
+      toUserId: `p:${phone}`,
+      kind: r.kind,
+      note: "",
+      createdAt: r.created_at,
+      caughtAt: r.caught_at,
+      fromHandle: r.from_phone.slice(-4),
+      fromName: r.from_name,
+      fromHue: Math.abs(hashCode(r.from_phone)) % 360,
+    }));
+
+    const sent: SentKiss[] = sentRows.map((r) => ({
+      id: Number(r.id) + 1000000,
+      toUserId: `p:${r.to_phone}`,
+      toName: r.to_name,
+      toHandle: r.to_phone.slice(-4),
+      caught: Boolean(r.caught_at),
+      createdAt: r.created_at,
+    }));
+
+    return { inbox, sent };
+  });
+
+/**
  * Which database this deployment writes to. `label` is the Neon endpoint id
  * (`ep-…`), never credentials — enough to tell a preview branch from main.
  */

@@ -15,7 +15,7 @@ import { SendSheet, type SendTarget } from "@/components/send-sheet";
 import { SoundSettings } from "@/components/sound-settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { invalidateHome, invalidatePhoneInbox, useHome, usePhoneInbox, usePhoneStats } from "@/hooks/use-home";
+import { invalidateHome, invalidatePhoneInbox, useHome, usePhoneHome, usePhoneInbox, usePhoneStats } from "@/hooks/use-home";
 import { useKeyboardInset } from "@/hooks/use-keyboard";
 import { GROK_PROVIDERS, authEnabled, signIn } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -121,6 +121,12 @@ function Home() {
   const home = useHome(Boolean(liveUser));
   const phoneBox = usePhoneInbox(me.phone);
   const phoneTotals = usePhoneStats(me.phone);
+  const phoneOrbit = usePhoneHome(me.phone);
+  // Prefer OAuth getHome when signed in; otherwise phone_kisses for the number.
+  const serverOrbitData: Pick<HomePayload, "inbox" | "sent"> | undefined = home.data
+    ? { inbox: home.data.inbox, sent: home.data.sent }
+    : phoneOrbit.data;
+  const serverOrbitReady = Boolean(home.data || phoneOrbit.isFetched);
 
   // Home counters come from Neon whenever Neon has an answer. getHome already
   // folds in phone kisses for a profile whose phone is this phone; otherwise
@@ -207,16 +213,15 @@ function Home() {
   }, [serverReceived]);
 
   useEffect(() => {
-    if (!home.data || !me.entered) return;
-    const hydratedOrbit = mergeOrbit(me.orbit, home.data);
-    if (hydratedOrbit.length > 0) {
-      const orbitChanged = JSON.stringify(hydratedOrbit.slice(0, 12)) !== JSON.stringify(me.orbit.slice(0, 12));
-      if (orbitChanged || me.orbit.length === 0) {
-        patch({ orbit: hydratedOrbit.slice(0, 12) });
-      }
+    if (!me.entered || !serverOrbitReady) return;
+    // Server-trusted: drop local-only QA leftovers even when Neon orbit is empty.
+    const hydratedOrbit = mergeOrbit(me.orbit, serverOrbitData, { trustServer: true });
+    const orbitChanged = JSON.stringify(hydratedOrbit.slice(0, 12)) !== JSON.stringify(me.orbit.slice(0, 12));
+    if (orbitChanged || (me.orbit.length > 0 && hydratedOrbit.length === 0)) {
+      patch({ orbit: hydratedOrbit.slice(0, 12) });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [home.data?.inbox, home.data?.sent]);
+  }, [home.data?.inbox, home.data?.sent, phoneOrbit.data, serverOrbitReady]);
 
   useEffect(() => {
     const theirPhone = home.data?.profile?.phone;
@@ -224,6 +229,29 @@ function Home() {
     patch({ phone: theirPhone });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [home.data?.profile?.phone]);
+
+  // Neon phone_book.photo is source of truth — hydrate on boot for this phone.
+  useEffect(() => {
+    if (!isValidPhone(me.phone)) return;
+    let gone = false;
+    void lookupFace({ data: { phone: me.phone } })
+      .then((hit) => {
+        if (gone || (!hit.photo && !hit.name)) return;
+        setMe((prev) => {
+          const nextPhoto = hit.photo || prev.photo;
+          const nextName = prev.name || hit.name || "";
+          if (nextPhoto === prev.photo && nextName === prev.name) return prev;
+          const next = { ...prev, photo: nextPhoto, name: nextName, entered: true };
+          saveMe(next);
+          return next;
+        });
+        if (hit.photo) rememberPhoto(hit.photo);
+      })
+      .catch(() => undefined);
+    return () => {
+      gone = true;
+    };
+  }, [me.phone]);
 
   useEffect(() => {
     const inbox = home.data?.inbox ?? [];
@@ -255,13 +283,11 @@ function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [home.data?.inbox]);
 
+  // Presence only — never push local photo here (that would overwrite Neon on boot).
   useEffect(() => {
     if (!isValidPhone(me.phone)) return;
-    void (async () => {
-      const photo = me.photo ? await shrinkDataUrl(me.photo, 160) : null;
-      await registerPhone({ data: { phone: me.phone, name: me.name, photo } }).catch(() => undefined);
-    })();
-  }, [me.phone, me.name, me.photo]);
+    void registerPhone({ data: { phone: me.phone, name: me.name, photo: null } }).catch(() => undefined);
+  }, [me.phone, me.name]);
 
   useEffect(() => {
     if (!liveUser || !isValidPhone(me.phone)) return;
@@ -305,7 +331,10 @@ function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phoneBox.data]);
 
-  const orbit = useMemo(() => mergeOrbit(me.orbit, home.data), [me.orbit, home.data]);
+  const orbit = useMemo(
+    () => mergeOrbit(me.orbit, serverOrbitData, { trustServer: serverOrbitReady }),
+    [me.orbit, serverOrbitData, serverOrbitReady],
+  );
 
   useEffect(() => {
     const id = window.setInterval(() => setSuperTick((n) => n + 1), 500);
@@ -816,11 +845,14 @@ function Home() {
           photo={me.photo}
           onClose={() => setProfileOpen(false)}
           onAddPhoto={() => setPhotoOpen(true)}
-          onMain={(p) => {
+          onMain={async (p) => {
             const g = loadGallery();
             saveGallery({ ...g, main: p });
             patch({ photo: p });
-            if (me.phone) void registerPhone({ data: { phone: me.phone, name: me.name, photo: p } }).catch(() => undefined);
+            if (me.phone) {
+              const photo = await shrinkDataUrl(p, 160);
+              void registerPhone({ data: { phone: me.phone, name: me.name, photo } }).catch(() => undefined);
+            }
           }}
           onSend={(p) => {
             const g = loadGallery();
@@ -1053,7 +1085,12 @@ function Home() {
   );
 }
 
-function mergeOrbit(local: OrbitItem[], data: HomePayload | undefined): OrbitItem[] {
+function mergeOrbit(
+  local: OrbitItem[],
+  data: Pick<HomePayload, "inbox" | "sent"> | undefined,
+  opts?: { trustServer?: boolean },
+): OrbitItem[] {
+  const trustServer = Boolean(opts?.trustServer);
   const people = new Map<string, OrbitItem>();
 
   function personKey(name: string, userId?: string) {
@@ -1110,15 +1147,16 @@ function mergeOrbit(local: OrbitItem[], data: HomePayload | undefined): OrbitIte
   for (const [, list] of inboxBy) {
     const k = list[0];
     if (!k) continue;
+    const tel = k.fromUserId?.startsWith("p:") ? k.fromUserId.slice(2) : telOf(k.fromName);
     bump({
       id: `in-${k.fromUserId || k.fromName}`,
       dir: "in",
       name: k.fromName,
       status: list.some((x) => !x.caughtAt) ? "waiting" : "caught",
       serverId: list.find((x) => !x.caughtAt)?.id ?? k.id,
-      photo: photoOf(k.fromName),
+      photo: photoOf(k.fromName, tel),
       hue: k.fromHue,
-      tel: telOf(k.fromName),
+      tel,
       skin: k.kind,
       userId: k.fromUserId,
       toMe: list.length,
@@ -1136,14 +1174,15 @@ function mergeOrbit(local: OrbitItem[], data: HomePayload | undefined): OrbitIte
   for (const [, list] of sentBy) {
     const k = list[0];
     if (!k) continue;
+    const tel = k.toUserId?.startsWith("p:") ? k.toUserId.slice(2) : telOf(k.toName);
     bump({
       id: `out-${k.toUserId || k.toName}`,
       dir: "out",
       name: k.toName,
       status: list.every((x) => x.caught) ? "caught" : "waiting",
       serverId: k.id,
-      photo: photoOf(k.toName),
-      tel: telOf(k.toName),
+      photo: photoOf(k.toName, tel),
+      tel,
       userId: k.toUserId,
       toMe: 0,
       fromMe: list.length,
@@ -1169,6 +1208,8 @@ function mergeOrbit(local: OrbitItem[], data: HomePayload | undefined): OrbitIte
       if (tel) cur.tel = tel;
       continue;
     }
+    // When Neon answered, local-only chips are QA/stale ghosts — skip them.
+    if (trustServer) continue;
     bump({
       ...first,
       toMe: list.filter((x) => x.dir === "in").reduce((n, x) => n + (x.toMe ?? 1), 0),
