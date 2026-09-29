@@ -391,3 +391,6 @@
 .name-line, .phone-line, .counts { max-width: 92vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .name-line { font-size: clamp(0.95rem, 5.2vw, 1.2rem); }
 .name-line, .phone-line, .counts { width: max-content; overflow: visible; }
+
+.stage .orbit { margin-top: auto; }
+.stage .dock { margin-top: 0.9rem; }
