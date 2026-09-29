@@ -11,8 +11,8 @@ export function BootSplash({ onReady }: { onReady: () => void }) {
     const start = Date.now();
     const id = window.setInterval(() => {
       const t = Date.now() - start;
-      if (t >= 140) setDark(true);
-      const next = Math.min(100, 12 + (t / 380) * 88);
+      if (t >= 1000) setDark(true);
+      const next = Math.min(100, 12 + (t / 2200) * 88);
       setPct(next);
       if (next >= 100 && !done.current) {
         done.current = true;
@@ -24,7 +24,7 @@ export function BootSplash({ onReady }: { onReady: () => void }) {
       done.current = true;
       setPct(100);
       onReady();
-    }, 450);
+    }, 2400);
     return () => {
       window.clearInterval(id);
       window.clearTimeout(fail);
