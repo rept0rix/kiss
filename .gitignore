@@ -15,3 +15,4 @@ dist/
 .nitro/
 .tanstack/
 .wrangler/
+kiss/
