@@ -3,7 +3,9 @@ import { loadBlocks, unblockLocal, type BlockedPerson } from "@/lib/block";
 import { authEnabled, signOut } from "@/lib/auth/client";
 import { leaveLocalSession } from "@/lib/me";
 import { getRuntimeInfo, unblockPhone } from "@/lib/kisses/server";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Music, Plus, Trash2 } from "lucide-react";
+import { addTrack, getActiveId, listTracks, removeTrack, restartTrack, setActiveId, type Track } from "@/lib/music";
 
 export function SoundSettings({
   open,
@@ -20,6 +22,21 @@ export function SoundSettings({
   const [blocked, setBlocked] = useState<BlockedPerson[]>(() => loadBlocks());
   const [runtime, setRuntime] = useState<{ db: string; label: string } | null>(null);
   const [leaving, setLeaving] = useState(false);
+  const [tracks, setTracks] = useState<Track[]>([]);
+  const [activeId, setActive] = useState(getActiveId);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) void listTracks().then(setTracks);
+  }, [open]);
+
+  function pick(id: string) {
+    unlockSound();
+    setActiveId(id);
+    setActive(id);
+    if (prefs.music) void restartTrack();
+    else setPrefs(setSoundPrefs({ music: true }));
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -84,6 +101,48 @@ export function SoundSettings({
         <button type="button" className="sound-row" onClick={() => toggle("music")}>
           <span>Background music</span>
           <span className={prefs.music ? "sound-on" : "sound-off"}>{prefs.music ? "On" : "Off"}</span>
+        </button>
+        <p className="connect-label">Songs</p>
+        <ul className="hit-list mt-2">
+          {tracks.map((t) => (
+            <li key={t.id} className="hit">
+              <button type="button" className="hit-copy flex items-center gap-2 text-left" onClick={() => pick(t.id)}>
+                <Music size={14} />
+                <span className="hit-name">{t.name}</span>
+              </button>
+              {activeId === t.id && prefs.music ? <span className="sound-on">Playing</span> : null}
+              {!t.builtin ? (
+                <button
+                  type="button"
+                  className="invite-toggle"
+                  aria-label="Remove song"
+                  onClick={() => void removeTrack(t.id).then(() => {
+                    setActive(getActiveId());
+                    void listTracks().then(setTracks);
+                    if (prefs.music) void restartTrack();
+                  })}
+                >
+                  <Trash2 size={14} />
+                </button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="audio/*"
+          multiple
+          hidden
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            e.target.value = "";
+            void Promise.all(files.map(addTrack)).then(() => listTracks().then(setTracks));
+          }}
+        />
+        <button type="button" className="sound-row" onClick={() => fileRef.current?.click()}>
+          <span>Add songs</span>
+          <span className="sound-on"><Plus size={16} /></span>
         </button>
         <p className="connect-label">Blocked · they don't know</p>
         {blocked.length === 0 ? (
