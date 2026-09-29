@@ -2,8 +2,12 @@ import { createServerFn } from "@tanstack/react-start";
 import { dbLabel, dbSource, getSql, type DbSource, type Sql } from "@/lib/db";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { MIN_PHONE_DIGITS, MIN_REAL_PHONE_DIGITS, MAX_PHONE_DIGITS, normalizePhone, phonesMatch } from "@/lib/phone";
+import { resolveShareOrigin } from "@/lib/share-origin";
 import { isKissKind, type KissKindId } from "./kinds";
 import type { Friend, HomePayload, KissRow, LeaderRow, PhoneStats, Profile, PublicPerson, SentKiss } from "./types";
+
+/** A cut data URL is a broken image, so oversized photos are rejected, never truncated. */
+const MAX_PROFILE_PHOTO_CHARS = 200000;
 
 const NO_PHONE_STATS: PhoneStats = { sentToday: 0, receivedToday: 0, sentAll: 0, receivedAll: 0 };
 
@@ -1062,37 +1066,101 @@ export const resolveShareLink = createServerFn({ method: "GET" })
         `
       )[0];
     }
-    if (!row) return null;
+    if (!row) {
+      const qr = await qrCodeOwner(sql, code);
+      if (!qr) return null;
+      row = { from_name: qr.name, to_phone: null, from_phone: qr.phone };
+    }
     const fromPhoto = await findPhoto(sql, row.from_phone ?? null, row.from_name);
     return { fromName: row.from_name, toPhone: row.to_phone, code, fromPhoto };
   });
 
-export const getShareCard = createServerFn({ method: "GET" })
-  .validator((code: string) => code)
-  .handler(async ({ data: raw }): Promise<string | null> => {
-    const code = raw.trim().toLowerCase().slice(0, 8);
-    if (!/^[a-z0-9]{4,8}$/.test(code)) return null;
-    const sql = await getSql();
-    try {
-      const stored = await sql<{ body: string }>`
-        select body from share_cards where code = ${code} limit 1
-      `;
-      if (stored[0]?.body?.startsWith("data:image")) return stored[0].body;
-    } catch {
-      /* table missing */
-    }
-    try {
-      const rows = await sql<{ card: string | null; from_phone: string | null; from_name: string }>`
-        select card, from_phone, from_name from share_links where code = ${code}
-      `;
-      const row = rows[0];
-      if (row?.card?.startsWith("data:image")) return row.card;
-      const photo = await findPhoto(sql, row?.from_phone ?? null, row?.from_name ?? null);
-      return photo;
-    } catch {
-      return null;
-    }
+/** Personal QR links (/k/<code>) live in qr_codes, not share_links. */
+async function qrCodeOwner(sql: Sql, code: string): Promise<{ phone: string; name: string } | null> {
+  const rows = await sql<{ phone: string; display_name: string | null }>`
+    select phone, display_name from qr_codes where code = ${code} limit 1
+  `.catch(() => []);
+  const r = rows[0];
+  if (!r) return null;
+  return { phone: r.phone, name: r.display_name?.trim() || "Someone" };
+}
+
+/**
+ * Absolute origin for share metadata. Link-preview crawlers ignore relative
+ * og:image URLs. Published apps pin VITE_PUBLIC_HOSTNAME because the platform
+ * proxy rewrites the request Host to an internal domain.
+ */
+export const getShareOrigin = createServerFn({ method: "GET" }).handler(async (): Promise<string> => {
+  let host = "";
+  let proto = "";
+  try {
+    const { getRequest } = await import("@tanstack/react-start/server");
+    const req = getRequest();
+    host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "";
+    proto = req.headers.get("x-forwarded-proto") ?? "";
+  } catch {
+    /* no request context */
+  }
+  return resolveShareOrigin({
+    pinned: process.env.VITE_PUBLIC_HOSTNAME,
+    vercelEnv: process.env.VERCEL_ENV,
+    host,
+    proto,
   });
+});
+
+export type ShareCardSource = {
+  code: string;
+  /** Stored browser-rendered card (data URL), if any. */
+  card: string | null;
+  photo: string | null;
+  name: string;
+  /** One-off share links may cache the rendered card; QR codes track the live profile photo. */
+  persist: boolean;
+};
+
+/** Server-only: raw inputs for /c/<code>. Rendering lives in share-card-image.ts (sharp). */
+export async function loadShareCardSource(raw: string): Promise<ShareCardSource | null> {
+  const code = raw.trim().toLowerCase().slice(0, 8);
+  if (!/^[a-z0-9]{4,8}$/.test(code)) return null;
+  const sql = await getSql();
+  let stored: string | null = null;
+  try {
+    const rows = await sql<{ body: string }>`
+      select body from share_cards where code = ${code} limit 1
+    `;
+    if (rows[0]?.body?.startsWith("data:image")) stored = rows[0].body;
+  } catch {
+    /* table missing */
+  }
+  try {
+    const rows = await sql<{ card: string | null; from_phone: string | null; from_name: string }>`
+      select card, from_phone, from_name from share_links where code = ${code}
+    `;
+    const row = rows[0];
+    if (row) {
+      const card = stored ?? (row.card?.startsWith("data:image") ? row.card : null);
+      const photo = card ? null : await findPhoto(sql, row.from_phone ?? null, row.from_name ?? null);
+      return { code, card, photo, name: row.from_name || "Someone", persist: true };
+    }
+  } catch {
+    /* fall through to QR codes */
+  }
+  const qr = await qrCodeOwner(sql, code);
+  if (!qr) return stored ? { code, card: stored, photo: null, name: "Someone", persist: false } : null;
+  const photo = await findPhoto(sql, qr.phone, null).catch(() => null);
+  return { code, card: null, photo, name: qr.name, persist: false };
+}
+
+/** Server-only: cache a rendered card in the existing share_cards table. */
+export async function storeShareCard(code: string, body: string): Promise<void> {
+  const sql = await getSql();
+  await sql`
+    insert into share_cards (code, body)
+    values (${code}, ${body})
+    on conflict (code) do update set body = excluded.body
+  `;
+}
 
 function bookPerson(
   phone: string,
@@ -1120,7 +1188,8 @@ export const registerPhone = createServerFn({ method: "POST" })
     }
     const name = (data.name ?? "").trim().slice(0, 32);
     const rawPhoto = data.photo ?? "";
-    const photo = rawPhoto.startsWith("data:image") ? rawPhoto.slice(0, 120000) : null;
+    if (rawPhoto.length > MAX_PROFILE_PHOTO_CHARS) throw new Error("Photo is too big");
+    const photo = rawPhoto.startsWith("data:image") ? rawPhoto : null;
     const sql = await getSql();
     // Re-registering a number that is already in the book under another
     // spelling (missing country code, short QA form) updates that row instead
@@ -1198,7 +1267,7 @@ export const searchDirectory = createServerFn({ method: "POST" })
       }
       if (!name && !phone) continue;
       seen.add(key);
-      const wantPhoto = qName.length >= 2 || lookingPhone;
+      const wantPhoto = qName.length >= 2 || lookingPhone || mine.length >= MIN_PHONE_DIGITS;
       const photo =
         wantPhoto && typeof r.photo === "string" && r.photo.startsWith("data:") ? r.photo : null;
       const uid = typeof r.user_id === "string" ? r.user_id : `p:${phone || name}`;
@@ -1352,10 +1421,17 @@ export const phoneHome = createServerFn({ method: "POST" })
       n: number;
       created_at: string;
       caught_at: string | null;
+      photo: string | null;
     }>`
       select pk.id, pk.from_phone, pk.from_name, pk.kind, pk.n,
              pk.created_at::text as created_at,
-             pk.caught_at::text as caught_at
+             pk.caught_at::text as caught_at,
+             (
+               select photo from phone_book
+               where photo is not null and phone_match(phone, pk.from_phone)
+               order by length(phone) desc
+               limit 1
+             ) as photo
       from phone_kisses pk
       where phone_match(pk.to_phone, ${phone})
       order by pk.created_at desc
@@ -1370,6 +1446,7 @@ export const phoneHome = createServerFn({ method: "POST" })
       n: number;
       created_at: string;
       caught_at: string | null;
+      photo: string | null;
     }>`
       select pk.id, pk.to_phone,
              coalesce(
@@ -1378,12 +1455,29 @@ export const phoneHome = createServerFn({ method: "POST" })
              ) as to_name,
              pk.kind, pk.n,
              pk.created_at::text as created_at,
-             pk.caught_at::text as caught_at
+             pk.caught_at::text as caught_at,
+             (
+               select photo from phone_book
+               where photo is not null and phone_match(phone, pk.to_phone)
+               order by length(phone) desc
+               limit 1
+             ) as photo
       from phone_kisses pk
       where phone_match(pk.from_phone, ${phone})
       order by pk.created_at desc
       limit 20
     `.catch(() => []);
+
+    // Each photo is tens of KB: send it once per counterpart, not on every row.
+    const photoOnceIn = new Set<string>();
+    const photoOnceOut = new Set<string>();
+    const photoOnce = (seen: Set<string>, counterpart: string, photo: string | null): string | null => {
+      if (!photo || !photo.startsWith("data:")) return null;
+      const key = counterpart.replace(/\D/g, "").slice(-8);
+      if (seen.has(key)) return null;
+      seen.add(key);
+      return photo;
+    };
 
     const inbox: KissRow[] = inboxRows.map((r) => ({
       id: Number(r.id) + 1000000,
@@ -1396,6 +1490,7 @@ export const phoneHome = createServerFn({ method: "POST" })
       fromHandle: r.from_phone.slice(-4),
       fromName: r.from_name,
       fromHue: Math.abs(hashCode(r.from_phone)) % 360,
+      photo: photoOnce(photoOnceIn, r.from_phone, r.photo),
     }));
 
     const sent: SentKiss[] = sentRows.map((r) => ({
@@ -1405,6 +1500,7 @@ export const phoneHome = createServerFn({ method: "POST" })
       toHandle: r.to_phone.slice(-4),
       caught: Boolean(r.caught_at),
       createdAt: r.created_at,
+      photo: photoOnce(photoOnceOut, r.to_phone, r.photo),
     }));
 
     return { inbox, sent };

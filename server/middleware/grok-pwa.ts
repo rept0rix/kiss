@@ -9,6 +9,8 @@
  * - `/__grok/manifest.webmanifest` → per-app-named manifest (kept out of
  *   public/ so this dynamic response is the only one).
  * - Other HTML documents → stream-inject PWA + OG head tags at `</head>`.
+ *   Pages that render their own og:image keep their share metas
+ *   (see server/lib/share-aware-head.mjs).
  *   OG identity is baked via `virtual:grok-og-identity` at `vite build`
  *   (this function cannot read `src/lib/og/site.json` or `public/og.jpg`).
  *   This must be a middleware transforming `next()`: h3 discards the `response`
@@ -18,12 +20,12 @@ import installPageTemplate from "../../scripts/install-page.html?raw";
 import { grokOgIdentity } from "virtual:grok-og-identity";
 import {
   acceptsHtml,
-  createHeadInjector,
   isDocumentPath,
   isInstallQuery,
   renderInstallPageHtml,
   renderWebManifest,
 } from "../../scripts/grok-pwa-shared.mjs";
+import { createShareAwareHeadInjector } from "../lib/share-aware-head.mjs";
 
 interface GrokPwaEvent {
   url: URL;
@@ -37,7 +39,7 @@ function requestHost(event: GrokPwaEvent): string {
 }
 
 function injectHeadStreaming(response: Response, host: string): Response {
-  const injector = createHeadInjector({
+  const injector = createShareAwareHeadInjector({
     host,
     site: grokOgIdentity.site,
   });
