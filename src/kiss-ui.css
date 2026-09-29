@@ -394,3 +394,19 @@
 
 .stage .orbit { margin-top: auto; }
 .stage .dock { margin-top: 0.9rem; }
+
+/* Zoom −/+ lives in the top bar, centered between LIVE and the icons */
+.orbit-zoom {
+  position: fixed;
+  top: max(0.55rem, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  height: 2.5rem;
+  align-items: center;
+  border-radius: 999px;
+  background: rgb(7 7 7 / 0.45);
+  color: var(--color-fg);
+}
+.orbit-zoom button { width: 2.4rem; height: 100%; font-size: 1.15rem; line-height: 1; }
