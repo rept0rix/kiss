@@ -1,7 +1,8 @@
+import { useQuery } from "@tanstack/react-query";
 import { genericOAuthClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import { runPreSignInSignOut, runSignOut } from "../../../scripts/sign-out-plan.mjs";
-import { GROK_PROVIDERS } from "./providers";
+import { AUTH_PROVIDERS_PATH, findProvider, type EnabledProvider } from "./providers";
 
 /**
  * Better Auth client for this React SPA (browser-side).
@@ -37,8 +38,33 @@ export const authClient = createAuthClient({
  */
 export const authEnabled = import.meta.env.VITE_AUTH_ENABLED !== "false";
 
-/** The upstream providers to render sign-in buttons for. */
-export { GROK_PROVIDERS };
+export type { EnabledProvider };
+
+async function fetchEnabledProviders(): Promise<EnabledProvider[]> {
+  try {
+    const res = await fetch(AUTH_PROVIDERS_PATH, { headers: { accept: "application/json" } });
+    if (!res.ok) return [];
+    const body = (await res.json()) as { providers?: EnabledProvider[] };
+    return Array.isArray(body.providers) ? body.providers : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The sign-in providers the server has enabled right now (from runtime env, so
+ * Vercel env changes need no rebuild). `[]` while loading, on error, or when
+ * `authEnabled` is false — render no sign-in buttons in that case.
+ */
+export function useEnabledProviders(): EnabledProvider[] {
+  const { data } = useQuery({
+    queryKey: ["auth-providers"],
+    queryFn: fetchEnabledProviders,
+    enabled: authEnabled && typeof window !== "undefined",
+    staleTime: 5 * 60_000,
+  });
+  return data ?? [];
+}
 
 // ── Live-preview bearer token ────────────────────────────────────────────────
 // The embedded preview iframe has partitioned cookies, so we keep the session's
@@ -83,8 +109,12 @@ function inLivePreview(): boolean {
 type PopupMessage = { source: "grok-auth-popup"; token: string | null; error?: string };
 
 /**
- * Start sign-in with one upstream provider (`providerId` from `GROK_PROVIDERS`),
- * federating through the Grok auth broker.
+ * Start sign-in with one provider (an id from `useEnabledProviders()`).
+ *
+ * **Social** (`google` / `twitter`, this app's own OAuth apps): a full-page
+ * redirect via Better Auth `signIn.social`.
+ *
+ * **Broker** (`grok-*`), federating through the Grok auth broker:
  *
  * - **Live preview** (`*.grok-sandbox.com` iframe): opens a POPUP to
  *   `/auth/popup`, served by the template Vite plugin (see `vite.config.ts` +
@@ -102,6 +132,24 @@ export async function signIn(
 ): Promise<void> {
   const callbackURL = opts.callbackURL ?? "/";
   const errorCallbackURL = opts.errorCallbackURL ?? "/";
+
+  const provider = findProvider(providerId);
+  if (provider?.kind === "social") {
+    await runPreSignInSignOut({
+      livePreview: inLivePreview(),
+      hasBearer: Boolean(getBearerToken()),
+      requestSignOut: () => authClient.signOut(),
+      clearToken: () => setBearerToken(null),
+    });
+    const { data, error } = await authClient.signIn.social({
+      provider: provider.id,
+      callbackURL,
+      errorCallbackURL,
+    });
+    if (error) throw new Error(error.message ?? "Sign-in failed");
+    if (data?.url) window.location.href = data.url;
+    return;
+  }
 
   // Open the popup SYNCHRONOUSLY on the user gesture — before any await
   // (including signOut). Awaiting first drops user-gesture privilege in some
