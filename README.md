@@ -113,7 +113,24 @@ npm run build          # also applies migrations when DATABASE_URL is set
 
 **Published:** set `DATABASE_URL` to a Neon (or any Postgres) connection string. Preview without it uses a throwaway local DB.
 
-**Auth:** Google and X go through the app's Better Auth broker. Leave `VITE_AUTH_ENABLED=false` for phone-only.
+## Auth
+
+Phone login always works. Google and X sign-in use the app's own OAuth apps via Better Auth `socialProviders`. They are read at runtime, so changing Vercel env needs a redeploy but no code change. Set these in Vercel (Production):
+
+| Variable | Value |
+| --- | --- |
+| `BETTER_AUTH_URL` | `https://app.sendkiss.online` (falls back to `https://$VERCEL_PROJECT_PRODUCTION_URL`) |
+| `BETTER_AUTH_SECRET` | random, 32+ bytes (`openssl rand -hex 32`) |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google Cloud Console OAuth client |
+| `TWITTER_CLIENT_ID`, `TWITTER_CLIENT_SECRET` | X Developer Portal, OAuth 2.0 client |
+| `GROK_AUTH_ISSUER`, `GROK_AUTH_CLIENT_ID`, `GROK_AUTH_CLIENT_SECRET` | optional Grok auth broker; off when deployed unless set |
+
+Callback URLs to register:
+
+- Google Cloud Console: redirect URI `https://app.sendkiss.online/api/auth/callback/google`, JavaScript origin `https://app.sendkiss.online`.
+- X Developer Portal (OAuth 2.0): callback `https://app.sendkiss.online/api/auth/callback/twitter`.
+
+Without a provider's credentials its button is hidden (the client asks `/api/auth-providers`). If `BETTER_AUTH_SECRET` or a public origin is missing when deployed, the server logs an `[auth] … sign-in DISABLED` error and hides all Google/X buttons. Phone login still works in every case. When deployed, the app never uses the shared Grok preview client or a `localhost` origin. Leave `VITE_AUTH_ENABLED=false` for phone-only.
 
 ## Project map
 
