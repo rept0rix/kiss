@@ -512,31 +512,33 @@
 
 .name-line {
   margin-top: 0.35rem;
-  font-family: var(--font-display);
-  font-size: 1.7rem;
+  font-family: "Outfit", var(--font-sans);
+  font-weight: 800;
+  font-size: 1.2rem;
   line-height: 1.1;
-  letter-spacing: -0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .counts {
-  margin-top: 0.2rem;
-  font-size: 0.8rem;
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
   color: var(--color-muted);
 }
 
 .rank-bar {
-  width: min(16rem, 80vw);
-  margin-top: 0.45rem;
+  width: min(13rem, 70vw);
+  margin-top: 0.35rem;
 }
 
 .rank-name {
   display: flex;
   justify-content: space-between;
   gap: 0.5rem;
-  font-family: var(--font-display);
-  font-size: 0.85rem;
-  letter-spacing: 0.04em;
+  font-family: "Outfit", var(--font-sans);
+  font-weight: 700;
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
@@ -578,7 +580,7 @@
 
 .phone-line {
   margin-top: 0.15rem;
-  font-size: 0.8rem;
+  font-size: 0.7rem;
   color: var(--color-subtle);
   letter-spacing: 0.02em;
 }

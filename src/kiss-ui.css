@@ -387,3 +387,7 @@
 .live-row { scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); scroll-snap-type: x proximity; }
 .live-row::-webkit-scrollbar { display: none; }
 .live-pill { scroll-snap-align: start; }
+
+.name-line, .phone-line, .counts { max-width: 92vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.name-line { font-size: clamp(0.95rem, 5.2vw, 1.2rem); }
+.name-line, .phone-line, .counts { width: max-content; overflow: visible; }
