@@ -1,0 +1,9 @@
+# Base44 development environment
+
+- Start with `docker compose -f docker-compose.base44.yml up -d --build`. The web service maps host 3000 to Vite's existing port 8080 and runs the bind-mounted checkout, not a production bundle. Dependencies are installed from the lockfile at startup in a named volume.
+- Preview deliberately uses the documented phone-only mode (`VITE_AUTH_ENABLED=false`). No external credentials are needed. Google/X broker sign-in is not configured for Base44; the upstream preview broker is specific to its original hosting domain.
+- Leave DATABASE_URL unset for this preview. PGLite runs inside the app process, bootstraps migrations automatically, survives HMR, and loses database contents on process restart. Browser localStorage survives separately. Do not edit applied SQL migrations.
+- Vite receives the platform's `__VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS`. The HTML identifies live source with `/@id/virtual:tanstack-start-dev-client-entry`; `/@vite/client` is available but not directly embedded in the rendered HTML.
+- Verify with `curl -f http://localhost:3000/`, `docker compose -f docker-compose.base44.yml ps`, and `docker compose -f docker-compose.base44.yml logs --tail=60 web`.
+- Run `docker compose -f docker-compose.base44.yml exec -T web npm run typecheck` and `docker compose -f docker-compose.base44.yml exec -T web npm test`. Type-checking passed during setup. The script test stage reported 138 passing and 11 failing tests (upstream app-env/branding expectations); its failure prevents npm test from reaching the subsequent TypeScript tests. These are not startup blockers.
+- Browser startup reached the KISS welcome screen without failed requests. React reported an existing hydration attribute mismatch warning; screenshot verification was unavailable during setup.
