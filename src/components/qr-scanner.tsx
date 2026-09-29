@@ -99,7 +99,7 @@ export function QrScanner({
 
   return (
     <div className="sheet-scrim" onClick={onClose}>
-      <div className="sheet" role="dialog" aria-label="Scan QR" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet sheet-tall" role="dialog" aria-label="Scan QR" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-head">
           <p className="font-display text-xl">Scan QR</p>
           <button type="button" className="sheet-x" onClick={onClose} aria-label="Close">

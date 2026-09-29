@@ -79,7 +79,7 @@ export function SkinsStore({
 
   return (
     <div className="sheet-scrim" onClick={onClose}>
-      <div className="sheet" role="dialog" aria-label="Kiss styles" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet sheet-tall" role="dialog" aria-label="Kiss styles" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-head">
           <p className="font-display text-2xl">Kiss Styles</p>
           <button type="button" className="sheet-x" onClick={onClose} aria-label="Close">

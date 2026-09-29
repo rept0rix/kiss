@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { canPickContacts, pickFromPhone, type PhoneContact } from "@/lib/contacts";
 import { searchDirectory, sendPhoneKiss } from "@/lib/kisses/server";
 import { rankAt } from "@/lib/kisses/ranks";
@@ -26,6 +26,8 @@ export function ContactImport({
   const [unmatched, setUnmatched] = useState<PhoneContact[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [pasted, setPasted] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) {
@@ -38,11 +40,31 @@ export function ContactImport({
 
   if (!open) return null;
 
-  async function doImport() {
+  function parseText(text: string): PhoneContact[] {
+    const out: PhoneContact[] = [];
+    if (/BEGIN:VCARD/i.test(text)) {
+      for (const card of text.split(/BEGIN:VCARD/i).slice(1)) {
+        const name = /^FN[^:]*:(.+)$/im.exec(card)?.[1]?.trim() ?? "";
+        const tel = /^TEL[^:]*:(.+)$/im.exec(card)?.[1]?.trim() ?? "";
+        if (tel) out.push({ name: name || tel, tel } as PhoneContact);
+      }
+      return out;
+    }
+    for (const line of text.split(/\n/)) {
+      const digits = line.replace(/\D/g, "");
+      if (digits.length < 7) continue;
+      const tel = /\+?[\d][\d\s().-]{5,}/.exec(line)?.[0]?.trim() ?? digits;
+      const name = line.replace(tel, "").replace(/[,;:\t]+/g, " ").trim();
+      out.push({ name: name || tel, tel } as PhoneContact);
+    }
+    return out;
+  }
+
+  async function doImport(given?: PhoneContact[]) {
     setBusy(true);
     setMessage(null);
     try {
-      const picked = await pickFromPhone();
+      const picked = given ?? (await pickFromPhone());
       if (picked.length === 0) {
         setMessage("No contacts picked or contacts not available");
         return;
@@ -95,7 +117,7 @@ export function ContactImport({
 
   return (
     <div className="sheet-scrim" onClick={onClose}>
-      <div className="sheet" role="dialog" aria-label="Import contacts" onClick={(e) => e.stopPropagation()}>
+      <div className="sheet sheet-tall" role="dialog" aria-label="Import contacts" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-head">
           <p className="font-display text-xl">Find Friends</p>
           <button type="button" className="sheet-x" onClick={onClose} aria-label="Close">
@@ -108,19 +130,42 @@ export function ContactImport({
             <p className="text-sm text-muted mb-4">
               Import your contacts to find who's already on KISS.
             </p>
-            <Button
-              size="lg"
-              className="w-full"
-              disabled={busy || !canPickContacts()}
-              onClick={() => void doImport()}
-            >
-              {canPickContacts() ? (busy ? "Importing…" : "Import Contacts") : "Not supported"}
-            </Button>
-            {!canPickContacts() ? (
-              <p className="mt-2 text-xs text-muted">
-                Contact picker is available in the native app.
-              </p>
-            ) : null}
+            {canPickContacts() ? (
+              <Button size="lg" className="w-full" disabled={busy} onClick={() => void doImport()}>
+                {busy ? "Importing…" : "Import Contacts"}
+              </Button>
+            ) : (
+              <>
+                <textarea
+                  className="paste-box"
+                  placeholder={"Paste numbers, one per line\nDana, +66 98 151 9523"}
+                  value={pasted}
+                  onChange={(e) => setPasted(e.target.value)}
+                />
+                <Button
+                  size="lg"
+                  className="mt-2 w-full"
+                  disabled={busy || parseText(pasted).length === 0}
+                  onClick={() => void doImport(parseText(pasted))}
+                >
+                  {busy ? "Searching…" : "Find friends"}
+                </Button>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".vcf,.csv,.txt,text/vcard,text/plain,text/csv"
+                  hidden
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (f) void f.text().then((t) => setPasted(t));
+                  }}
+                />
+                <button type="button" className="mt-2 text-xs text-muted underline" onClick={() => fileRef.current?.click()}>
+                  or upload a .vcf / .csv contacts file
+                </button>
+              </>
+            )}
           </div>
         ) : null}
 
