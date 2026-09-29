@@ -38,8 +38,8 @@ export function BootSplash({ onReady }: { onReady: () => void }) {
         ? Array.from({ length: 8 }, (_, i) => (
             <HeartMark key={i} className={`boot-bit boot-heart boot-h-${i + 1}`} />
           ))
-        : Array.from({ length: 14 }, (_, i) => (
-            <LipsMark key={i} i={i} className={`boot-bit boot-kiss boot-k-${(i % 8) + 1}`} />
+        : Array.from({ length: 8 }, (_, i) => (
+            <LipsMark key={i} i={i} className={`boot-bit boot-kiss boot-k-${i + 1}`} />
           ))}
       <p className="boot-word">KISS</p>
       <div className="boot-meter">

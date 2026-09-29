@@ -246,14 +246,22 @@
   color: #e11d2e;
 }
 
-.boot-k-1, .boot-h-1 { width: 4.5rem; left: 8%; top: 12%; animation: kiss-fly-a 6s linear infinite; }
-.boot-k-2, .boot-h-2 { width: 3rem; right: 10%; top: 18%; animation: kiss-fly-b 7s linear infinite; }
-.boot-k-3, .boot-h-3 { width: 5.5rem; left: 18%; bottom: 16%; animation: kiss-fly-c 8s linear infinite; }
-.boot-k-4, .boot-h-4 { width: 2.4rem; right: 16%; bottom: 22%; animation: kiss-fly-a 5.5s linear infinite; animation-delay: -2s; }
-.boot-k-5, .boot-h-5 { width: 3.6rem; left: 42%; top: 8%; animation: kiss-fly-b 9s linear infinite; animation-delay: -1s; }
-.boot-k-6, .boot-h-6 { width: 2.8rem; left: 6%; top: 48%; animation: kiss-fly-c 6.5s linear infinite; animation-delay: -3s; }
-.boot-k-7, .boot-h-7 { width: 4rem; right: 8%; top: 52%; animation: kiss-fly-a 7.5s linear infinite; animation-delay: -4s; }
-.boot-k-8, .boot-h-8 { width: 3.2rem; left: 55%; bottom: 10%; animation: kiss-fly-b 8.5s linear infinite; animation-delay: -2.5s; }
+.boot-k-1, .boot-h-1 { width: 4.5rem; left: 8%; top: 12%; animation: boot-pop 2.8s ease-in-out infinite; animation-delay: 0s; }
+.boot-k-2, .boot-h-2 { width: 3rem; right: 10%; top: 18%; animation: boot-pop 2.8s ease-in-out infinite; animation-delay: 0.35s; }
+.boot-k-3, .boot-h-3 { width: 5.5rem; left: 18%; bottom: 16%; animation: boot-pop 2.8s ease-in-out infinite; animation-delay: 0.7s; }
+.boot-k-4, .boot-h-4 { width: 2.4rem; right: 16%; bottom: 22%; animation: boot-pop 2.8s ease-in-out infinite; animation-delay: 1.05s; }
+.boot-k-5, .boot-h-5 { width: 3.6rem; left: 42%; top: 8%; animation: boot-pop 2.8s ease-in-out infinite; animation-delay: 1.4s; }
+.boot-k-6, .boot-h-6 { width: 2.8rem; left: 6%; top: 48%; animation: boot-pop 2.8s ease-in-out infinite; animation-delay: 1.75s; }
+.boot-k-7, .boot-h-7 { width: 4rem; right: 8%; top: 52%; animation: boot-pop 2.8s ease-in-out infinite; animation-delay: 2.1s; }
+.boot-k-8, .boot-h-8 { width: 3.2rem; left: 55%; bottom: 10%; animation: boot-pop 2.8s ease-in-out infinite; animation-delay: 2.45s; }
+
+@keyframes boot-pop {
+  0% { transform: scale(0.3); opacity: 0; }
+  15% { transform: scale(1.1); opacity: 1; }
+  35% { transform: scale(1); opacity: 1; }
+  65% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.8); opacity: 0; }
+}
 
 .boot-meter {
   position: absolute;
@@ -1137,8 +1145,10 @@ body.sheet-open {
   .fly-heart,
   .kiss-enter,
   .kiss-ring,
-  .burst-bit {
+  .burst-bit,
+  .boot-bit {
     animation: none;
+    opacity: 0.5;
   }
 }
 
