@@ -327,3 +327,46 @@
 
 /* ---- Find Friends button ---- */
 .find-friends-btn { margin-top: 0.5rem; width: 100%; height: 2.6rem; border-radius: 0.8rem; background: var(--color-elevated); color: var(--color-fg); font-size: 0.85rem; display: flex; align-items: center; justify-content: center; gap: 0.4rem; }
+
+/* ---- Achievements ---- */
+.achievements { width: min(20rem, 90vw); margin-top: 0.4rem; }
+
+.ach-current {
+  display: flex; flex-direction: column; gap: 0.45rem;
+  border-radius: 0.8rem; background: var(--color-elevated);
+  padding: 0.65rem 0.8rem; margin-bottom: 0.6rem;
+}
+.ach-current-row { display: flex; align-items: center; gap: 0.6rem; }
+.ach-skin-badge {
+  display: grid; place-items: center;
+  width: 2.4rem; height: 2.4rem; border-radius: 999px;
+  background: rgb(255 255 255 / 0.06);
+}
+.ach-skin-icon { width: 1.6rem; height: 1.6rem; }
+.ach-current-info { display: flex; flex-direction: column; gap: 0.1rem; text-align: left; flex: 1; }
+.ach-current-name { font-family: var(--font-display); font-size: 1.1rem; text-transform: uppercase; }
+.ach-next-label { color: var(--color-muted); font-size: 0.72rem; }
+
+.ach-progress-track { height: 0.3rem; border-radius: 999px; background: rgb(255 255 255 / 0.08); overflow: hidden; }
+.ach-progress-fill { height: 100%; background: var(--color-primary); border-radius: 999px; transition: width 0.5s ease; }
+
+.ach-ladder { display: flex; flex-direction: column; gap: 0.2rem; }
+.ach-rank {
+  display: grid; grid-template-columns: 2rem 1fr auto; align-items: center;
+  gap: 0.5rem; padding: 0.3rem 0.5rem; border-radius: 0.55rem;
+  font-size: 0.82rem; transition: background 0.2s;
+}
+.ach-rank.is-unlocked { color: var(--color-fg); }
+.ach-rank.is-locked { color: var(--color-muted); opacity: 0.5; }
+.ach-rank.is-current { background: rgb(225 29 46 / 0.12); }
+.ach-rank-skin { display: grid; place-items: center; width: 1.8rem; height: 1.8rem; }
+.ach-rank-icon { width: 1.3rem; height: 1.3rem; }
+.ach-rank-name { text-align: left; text-transform: uppercase; font-size: 0.78rem; letter-spacing: 0.04em; }
+.ach-rank-threshold { font-size: 0.72rem; color: var(--color-muted); font-family: var(--font-display); }
+.ach-rank.is-unlocked .ach-rank-threshold { color: var(--color-primary); }
+
+.ach-stats { display: flex; align-items: center; justify-content: center; gap: 0; margin-top: 0.7rem; }
+.ach-stat { display: flex; flex-direction: column; align-items: center; gap: 0.1rem; padding: 0 0.9rem; }
+.ach-stat-num { font-family: var(--font-display); font-size: 1.3rem; color: var(--color-fg); }
+.ach-stat-label { font-size: 0.65rem; color: var(--color-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.ach-stat-sep { width: 1px; height: 2rem; background: var(--color-border); }
