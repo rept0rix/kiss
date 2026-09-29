@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { dbLabel, dbSource, getSql, type DbSource, type Sql } from "@/lib/db";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { MIN_PHONE_DIGITS, MIN_REAL_PHONE_DIGITS, MAX_PHONE_DIGITS, normalizePhone, phonesMatch } from "@/lib/phone";
+import { resolveShareOrigin } from "@/lib/share-origin";
 import { isKissKind, type KissKindId } from "./kinds";
 import type { Friend, HomePayload, KissRow, LeaderRow, PhoneStats, Profile, PublicPerson, SentKiss } from "./types";
 
@@ -1090,51 +1091,76 @@ async function qrCodeOwner(sql: Sql, code: string): Promise<{ phone: string; nam
  * proxy rewrites the request Host to an internal domain.
  */
 export const getShareOrigin = createServerFn({ method: "GET" }).handler(async (): Promise<string> => {
-  const pinned = (process.env.VITE_PUBLIC_HOSTNAME ?? "").trim().toLowerCase();
-  if (/^[a-z0-9.-]+\.[a-z]{2,}$/.test(pinned)) return `https://${pinned}`;
+  let host = "";
+  let proto = "";
   try {
     const { getRequest } = await import("@tanstack/react-start/server");
     const req = getRequest();
-    const host = (req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "").split(",")[0]?.trim() ?? "";
-    if (!/^[a-z0-9.-]+(:\d+)?$/i.test(host)) return "";
-    const local = /^(localhost|127\.|0\.0\.0\.0|\[::1\])/i.test(host);
-    const proto = (req.headers.get("x-forwarded-proto") ?? "").split(",")[0]?.trim() || (local ? "http" : "https");
-    return `${proto === "http" ? "http" : "https"}://${host}`;
+    host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "";
+    proto = req.headers.get("x-forwarded-proto") ?? "";
   } catch {
-    return "";
+    /* no request context */
   }
+  return resolveShareOrigin({
+    pinned: process.env.VITE_PUBLIC_HOSTNAME,
+    vercelEnv: process.env.VERCEL_ENV,
+    host,
+    proto,
+  });
 });
 
-export const getShareCard = createServerFn({ method: "GET" })
-  .validator((code: string) => code)
-  .handler(async ({ data: raw }): Promise<string | null> => {
-    const code = raw.trim().toLowerCase().slice(0, 8);
-    if (!/^[a-z0-9]{4,8}$/.test(code)) return null;
-    const sql = await getSql();
-    try {
-      const stored = await sql<{ body: string }>`
-        select body from share_cards where code = ${code} limit 1
-      `;
-      if (stored[0]?.body?.startsWith("data:image")) return stored[0].body;
-    } catch {
-      /* table missing */
+export type ShareCardSource = {
+  code: string;
+  /** Stored browser-rendered card (data URL), if any. */
+  card: string | null;
+  photo: string | null;
+  name: string;
+  /** One-off share links may cache the rendered card; QR codes track the live profile photo. */
+  persist: boolean;
+};
+
+/** Server-only: raw inputs for /c/<code>. Rendering lives in share-card-image.ts (sharp). */
+export async function loadShareCardSource(raw: string): Promise<ShareCardSource | null> {
+  const code = raw.trim().toLowerCase().slice(0, 8);
+  if (!/^[a-z0-9]{4,8}$/.test(code)) return null;
+  const sql = await getSql();
+  let stored: string | null = null;
+  try {
+    const rows = await sql<{ body: string }>`
+      select body from share_cards where code = ${code} limit 1
+    `;
+    if (rows[0]?.body?.startsWith("data:image")) stored = rows[0].body;
+  } catch {
+    /* table missing */
+  }
+  try {
+    const rows = await sql<{ card: string | null; from_phone: string | null; from_name: string }>`
+      select card, from_phone, from_name from share_links where code = ${code}
+    `;
+    const row = rows[0];
+    if (row) {
+      const card = stored ?? (row.card?.startsWith("data:image") ? row.card : null);
+      const photo = card ? null : await findPhoto(sql, row.from_phone ?? null, row.from_name ?? null);
+      return { code, card, photo, name: row.from_name || "Someone", persist: true };
     }
-    try {
-      const rows = await sql<{ card: string | null; from_phone: string | null; from_name: string }>`
-        select card, from_phone, from_name from share_links where code = ${code}
-      `;
-      const row = rows[0];
-      if (row?.card?.startsWith("data:image")) return row.card;
-      if (!row) {
-        const qr = await qrCodeOwner(sql, code);
-        return qr ? await findPhoto(sql, qr.phone, null) : null;
-      }
-      const photo = await findPhoto(sql, row.from_phone ?? null, row.from_name ?? null);
-      return photo;
-    } catch {
-      return null;
-    }
-  });
+  } catch {
+    /* fall through to QR codes */
+  }
+  const qr = await qrCodeOwner(sql, code);
+  if (!qr) return stored ? { code, card: stored, photo: null, name: "Someone", persist: false } : null;
+  const photo = await findPhoto(sql, qr.phone, null).catch(() => null);
+  return { code, card: null, photo, name: qr.name, persist: false };
+}
+
+/** Server-only: cache a rendered card in the existing share_cards table. */
+export async function storeShareCard(code: string, body: string): Promise<void> {
+  const sql = await getSql();
+  await sql`
+    insert into share_cards (code, body)
+    values (${code}, ${body})
+    on conflict (code) do update set body = excluded.body
+  `;
+}
 
 function bookPerson(
   phone: string,
