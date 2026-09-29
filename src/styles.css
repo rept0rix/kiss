@@ -1142,6 +1142,83 @@ body.sheet-open {
   to { transform: scale(1) rotate(-8deg); opacity: 1; }
 }
 
+/* ── Desktop wide layout ───────────────────────────── */
+.stage-left,
+.stage-right {
+  display: contents;
+}
+
+@media (min-width: 1024px) {
+  .stage {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 2.5rem;
+    padding-inline: 3rem;
+  }
+
+  .stage-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    text-align: right;
+    flex: 1;
+    max-width: 22rem;
+    gap: 0.35rem;
+  }
+
+  .stage-right {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    flex: 1;
+    max-width: 22rem;
+    gap: 1rem;
+    justify-content: flex-end;
+  }
+
+  .stage .orbit {
+    order: 2;
+    width: 28rem;
+    height: 28rem;
+    max-height: 78dvh;
+    margin-top: 0;
+    flex: 0 0 auto;
+  }
+
+  .stage-left { order: 1; }
+  .stage-right { order: 3; }
+
+  .orbit-photo,
+  .orbit-empty {
+    width: 9rem;
+    height: 9rem;
+  }
+
+  .orbit-chip { width: 4.2rem; }
+  .chip-face,
+  .chip-photo,
+  .chip-initials,
+  .chip-face .face-init { width: 3.6rem; height: 3.6rem; }
+
+  .name-line { font-size: 2rem; }
+
+  .counts { margin-top: 0.4rem; font-size: 0.9rem; }
+  .phone-line { font-size: 0.85rem; }
+
+  .live-row {
+    flex-direction: column;
+    width: 100%;
+    gap: 0.5rem;
+    overflow: visible;
+  }
+
+  .stage .dock {
+    margin-top: auto;
+    max-width: 100%;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .fly-kiss,
   .fly-heart,

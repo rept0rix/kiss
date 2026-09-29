@@ -654,6 +654,7 @@ function Home() {
           }}
         />
 
+        <div className="stage-left">
         <NameLine
           value={displayName}
           onChange={(name) => {
@@ -674,6 +675,8 @@ function Home() {
           <span className="tabular-nums text-fg">{received}</span> caught
         </p>
         <RankBar kisses={kissTotal} />
+        </div>
+        <div className="stage-right">
 
         {(home.data?.people ?? []).filter((p) => {
           const n = p.displayName.trim().toLowerCase();
@@ -750,6 +753,7 @@ function Home() {
           <button type="button" className="dock-more" onClick={() => setMoreOpen(true)}>
             <MoreHorizontal size={16} /> More
           </button>
+        </div>
         </div>
       </div>
       </KissSky>
