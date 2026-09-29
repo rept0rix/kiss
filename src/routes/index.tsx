@@ -30,6 +30,7 @@ import { cropPhoto, loadMe, saveMe, type MeState } from "@/lib/me";
 import { askNotify, notifyKiss } from "@/lib/notify";
 import { playCelebrate, soundsOn, startMusic, unlockSound } from "@/lib/sound";
 import { canSuper, consumeSuper, openSuperWindow, superState } from "@/lib/super";
+import { getSuperBalance } from "@/lib/store/server";
 import { MoreHorizontal, Settings, Volume2, VolumeX } from "lucide-react";
 import { MoreMenu } from "@/components/more-menu";
 import { QrScanner } from "@/components/qr-scanner";
@@ -126,6 +127,7 @@ function Home() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [skinsOpen, setSkinsOpen] = useState(false);
   const [superStoreOpen, setSuperStoreOpen] = useState(false);
+  const [superCount, setSuperCount] = useState(0);
   const [selectedSkin, setSelectedSkin] = useState("classic");
   const liveUser = user && !user.isDevFallback ? user : null;
   const home = useHome(Boolean(liveUser));
@@ -350,6 +352,11 @@ function Home() {
     const id = window.setInterval(() => setSuperTick((n) => n + 1), 500);
     return () => window.clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (!isPhoneIdentity(me.phone)) return;
+    void getSuperBalance({ data: me.phone }).then((r) => setSuperCount(r.balance ?? 0)).catch(() => undefined);
+  }, [me.phone, sendOpen]);
 
   useEffect(() => {
     if (!me.entered) return;
@@ -722,22 +729,10 @@ function Home() {
         ) : null}
 
         <div className="dock">
-          <Button
-            size="lg"
-            className="h-14 w-full rounded-xl font-display text-xl"
-            onClick={() => {
-              unlockSound();
-              askNotify();
-              setSendTarget(null);
-              setSendOpen(true);
-            }}
-          >
-            Send kiss
-          </Button>
-          {canSuper() ? (
-            <button
-              type="button"
-              className="super-dock"
+          <div className="relative">
+            <Button
+              size="lg"
+              className="h-14 w-full rounded-xl font-display text-xl"
               onClick={() => {
                 unlockSound();
                 askNotify();
@@ -745,10 +740,13 @@ function Home() {
                 setSendOpen(true);
               }}
             >
-              Super kiss
-              {superState().windowMs > 0 ? ` · ${Math.ceil(superState().windowMs / 1000)}s` : " · 1 today"}
-            </button>
-          ) : null}
+              Send kiss
+            </Button>
+            <div className={`super-badge ${superCount > 0 ? "" : "is-off"}`} aria-hidden>
+              <b>{superCount}</b>
+              <i>SUPER</i>
+            </div>
+          </div>
           <button type="button" className="dock-more" onClick={() => setMoreOpen(true)}>
             <MoreHorizontal size={16} /> More
           </button>
@@ -766,6 +764,7 @@ function Home() {
         people={home.data?.people ?? []}
         known={me.orbit.map((o) => ({ name: o.name, tel: o.tel, photo: o.photo }))}
         target={sendTarget}
+        superCount={superCount}
         onClose={() => {
           setSendOpen(false);
           setSendTarget(null);

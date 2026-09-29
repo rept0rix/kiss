@@ -13,6 +13,7 @@ import {
 import { loadGroups, upsertGroup, type KissGroup } from "@/lib/groups";
 import { rankAt } from "@/lib/kisses/ranks";
 import { createShareLink, searchDirectory, sendPhoneKiss } from "@/lib/kisses/server";
+import { consumeSuperKiss } from "@/lib/store/server";
 import type { PublicPerson } from "@/lib/kisses/types";
 import { buildKissCard } from "@/lib/kiss-card";
 import { shareBody, shortCatchUrl } from "@/lib/share";
@@ -68,6 +69,7 @@ export function SendSheet({
   people,
   known,
   target,
+  superCount = 0,
   onClose,
   onSent,
 }: {
@@ -80,6 +82,7 @@ export function SendSheet({
   people: PublicPerson[];
   known?: { name: string; tel?: string; photo?: string | null }[];
   target?: SendTarget | null;
+  superCount?: number;
   onClose: () => void;
   onSent: (sent: SentPayload) => void;
 }) {
@@ -91,6 +94,7 @@ export function SendSheet({
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [groups, setGroups] = useState<KissGroup[]>(() => loadGroups());
   const [inviteText, setInviteText] = useState("");
+  const [isSuper, setIsSuper] = useState(false);
   const picker = canPickContacts();
   useKeyboardInset(open);
 
@@ -100,6 +104,7 @@ export function SendSheet({
       setTel("");
       setError(null);
       setHits([]);
+      setIsSuper(false);
       return;
     }
     setQuery(target?.name ?? "");
@@ -200,7 +205,7 @@ export function SendSheet({
     for (const toPhone of phones) {
       try {
         await sendPhoneKiss({
-          data: { fromPhone: myPhone, fromName: myName, toPhone, count: 1, kind: rankAt(mySent).skin },
+          data: { fromPhone: myPhone, fromName: myName, toPhone, count: 1, kind: isSuper ? "super" : rankAt(mySent).skin },
         });
         saved += 1;
       } catch {
@@ -221,16 +226,20 @@ export function SendSheet({
       return;
     }
     setBusy(true);
+    const kind = isSuper ? "super" : rankAt(mySent).skin;
     void sendPhoneKiss({
       data: {
         fromPhone: myPhone,
         fromName: myName,
         toPhone,
         count,
-        kind: rankAt(mySent).skin,
+        kind,
       },
     })
-      .then((res) => finishInApp(res.toName || person.displayName, person.userId, count, toPhone))
+      .then((res) => {
+        if (isSuper) void consumeSuperKiss({ data: myPhone }).catch(() => undefined);
+        finishInApp(res.toName || person.displayName, person.userId, count, toPhone);
+      })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Missed"))
       .finally(() => setBusy(false));
   }
@@ -278,6 +287,20 @@ export function SendSheet({
           <p className="font-display text-xl">Send</p>
           <button type="button" className="sheet-x" onClick={onClose} aria-label="Close">
             Close
+          </button>
+        </div>
+
+        <div className="kiss-type">
+          <button type="button" className={isSuper ? "" : "is-on"} onClick={() => setIsSuper(false)}>
+            <span className="kiss-type-dot" /> Regular kiss
+          </button>
+          <button
+            type="button"
+            className={isSuper ? "is-on" : ""}
+            disabled={superCount <= 0}
+            onClick={() => setIsSuper(true)}
+          >
+            <span className="kiss-type-dot" /> Super kiss {superCount > 0 ? `· ${superCount}` : ""}
           </button>
         </div>
 

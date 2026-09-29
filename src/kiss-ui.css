@@ -424,22 +424,10 @@
 .person-body { justify-content: flex-start; }
 
 /* ===== 3D / soft-depth pass ===== */
-.orbit::before {
-  content: ""; position: absolute; inset: -4%; border-radius: 999px; pointer-events: none;
-  background:
-    radial-gradient(circle, transparent 0 22%, rgba(255,255,255,0.03) 22.5%, transparent 23% ),
-    radial-gradient(circle at 50% 35%, #1b1b1d 0%, #0a0a0b 70%);
-  box-shadow: inset 0 10px 28px rgba(0,0,0,0.9), inset 0 -6px 18px rgba(255,255,255,0.05), 0 12px 30px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04);
-}
-.orbit::after {
-  content: ""; position: absolute; inset: 14%; border-radius: 999px; pointer-events: none;
-  box-shadow: inset 0 8px 18px rgba(0,0,0,0.85), inset 0 -4px 10px rgba(255,255,255,0.06), 0 0 0 10px rgba(20,20,22,0.9), 0 0 0 11px rgba(255,255,255,0.04), 0 0 0 30px rgba(12,12,13,0.8), 0 0 0 31px rgba(255,255,255,0.035);
-  background: radial-gradient(circle at 50% 30%, #161617, #09090a);
-}
 .orbit-photo {
-  box-shadow: 0 0 0 3px #f4d9dc, 0 0 0 6px var(--color-primary), 0 14px 30px rgba(0,0,0,0.75), 0 0 34px rgba(227,27,46,0.45);
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.15), 0 0 0 4px var(--color-primary), 0 10px 22px rgba(0,0,0,0.6);
 }
-.orbit-chip > :first-child { border-radius: 999px; box-shadow: 0 0 0 2px rgba(255,255,255,0.9), 0 0 0 4px var(--color-primary), 0 8px 14px rgba(0,0,0,0.85), 0 0 14px rgba(227,27,46,0.4); }
+.orbit-chip > :first-child { border-radius: 999px; box-shadow: 0 0 0 1.5px rgba(255,255,255,0.25), 0 0 0 3px var(--color-primary), 0 4px 10px rgba(0,0,0,0.6); }
 .name-line { font-weight: 800; letter-spacing: 0.02em; text-shadow: 0 2px 0 rgba(0,0,0,0.8), 0 0 22px rgba(227,27,46,0.35); }
 .counts { padding: 0.25rem 0.8rem; border-radius: 999px; background: linear-gradient(#1a1a1c, #0e0e0f); box-shadow: inset 0 1px 0 rgba(255,255,255,0.07), 0 4px 10px rgba(0,0,0,0.6); }
 .rank-track { height: 0.4rem; border-radius: 999px; background: #0a0a0b; box-shadow: inset 0 2px 4px rgba(0,0,0,0.9), 0 1px 0 rgba(255,255,255,0.06); overflow: hidden; }
@@ -471,3 +459,39 @@
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 3px 0 #050505;
 }
 .stage .dock-more:active { transform: translateY(2px); box-shadow: 0 1px 0 #050505; }
+
+/* subtle single orbit track, sits behind chips only */
+.orbit::before {
+  content: ""; position: absolute; inset: 8%; border-radius: 999px; pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06), 0 0 18px rgba(227,27,46,0.08);
+  background: radial-gradient(circle at 50% 40%, rgba(20,20,22,0.5), transparent 70%);
+}
+
+/* Super badge on the Send kiss button */
+.super-badge {
+  position: absolute; top: -0.45rem; right: 0.6rem; z-index: 5;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-width: 2.6rem; height: 2.6rem; padding: 0 0.4rem; border-radius: 999px;
+  background: linear-gradient(180deg, #ff5468, #b1101f);
+  color: #fff; font-family: var(--font-display); line-height: 1;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 10px rgba(0,0,0,0.5), 0 0 0 2px rgba(255,255,255,0.12);
+}
+.super-badge b { font-size: 1.05rem; }
+.super-badge i { font-style: normal; font-size: 0.45rem; letter-spacing: 0.04em; opacity: 0.9; }
+.super-badge.is-off { background: linear-gradient(#2a2a2c, #161617); color: var(--color-muted); box-shadow: 0 3px 8px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06); }
+
+/* Kiss-type toggle inside the Send sheet */
+.kiss-type { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
+.kiss-type button {
+  flex: 1; height: 2.6rem; border-radius: 999px; border: 1px solid var(--color-border);
+  background: var(--color-elevated); color: var(--color-fg); font-size: 0.85rem;
+  display: flex; align-items: center; justify-content: center; gap: 0.35rem;
+}
+.kiss-type button.is-on {
+  border-color: var(--color-primary);
+  background: linear-gradient(180deg, #ff5468, #b1101f); color: #fff;
+  box-shadow: 0 4px 12px rgba(227,27,46,0.4);
+}
+.kiss-type button:disabled { opacity: 0.45; }
+.kiss-type-dot { width: 0.6rem; height: 0.6rem; border-radius: 999px; background: var(--color-primary); }
+.kiss-type button.is-on .kiss-type-dot { background: #fff; }
