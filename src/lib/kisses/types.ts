@@ -37,6 +37,7 @@ export type KissRow = {
   fromHandle: string;
   fromName: string;
   fromHue: number;
+  photo?: string | null;
 };
 
 export type SentKiss = {
@@ -46,6 +47,7 @@ export type SentKiss = {
   toHandle: string;
   caught: boolean;
   createdAt: string;
+  photo?: string | null;
 };
 
 export type LeaderRow = {

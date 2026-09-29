@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { CatchScreen } from "@/components/catch-screen";
 import { isValidPhone, phoneDigits } from "@/lib/contacts";
-import { lookupFace, resolveShareLink } from "@/lib/kisses/server";
+import { getShareOrigin, lookupFace, resolveShareLink } from "@/lib/kisses/server";
 import { loadMe, saveMe } from "@/lib/me";
 
 type Search = { p?: string };
@@ -13,25 +13,29 @@ export const Route = createFileRoute("/k/$from")({
   }),
   loader: async ({ params }) => {
     const raw = params.from || "";
+    const origin = await getShareOrigin().catch(() => "");
     if (/^[a-z0-9]{4,8}$/i.test(raw) && !raw.includes(" ")) {
       const hit = await resolveShareLink({ data: raw.toLowerCase() });
-      if (hit) return { ...hit, origin: "" };
+      if (hit) return { ...hit, origin };
     }
     return {
       fromName: decodeURIComponent(raw || "Someone"),
       toPhone: null as string | null,
       code: null as string | null,
       fromPhoto: (await lookupFace({ data: { name: decodeURIComponent(raw || "") } })).photo,
-      origin: "",
+      origin,
     };
   },
-  head: ({ loaderData }) => {
-    const image = loaderData?.code ? `/c/${loaderData.code}` : "/og.jpg";
+  head: ({ loaderData, params }) => {
+    const origin = loaderData?.origin ?? "";
+    const image = `${origin}${loaderData?.code ? `/c/${loaderData.code}` : "/og.jpg"}`;
+    const url = `${origin}/k/${encodeURIComponent(params.from ?? "")}`;
     return {
       meta: [
         { title: "Come get a kiss from me" },
         { name: "description", content: "I left one waiting for you." },
         { property: "og:type", content: "website" },
+        { property: "og:url", content: url },
         { property: "og:title", content: "Come get a kiss from me" },
         { property: "og:description", content: "Open it." },
         { property: "og:image", content: image },
