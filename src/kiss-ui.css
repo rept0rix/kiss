@@ -279,3 +279,51 @@
   margin: 0.2rem 0 0.6rem;
 }
 .lip-pack img { width: 1.8rem; height: auto; display: block; }
+
+/* ---- QR Code ---- */
+.qr-section { margin-top: 0.8rem; width: min(16rem, 80vw); }
+.qr-display { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; }
+.qr-img { width: 11rem; height: 11rem; border-radius: 0.8rem; background: var(--color-fg); }
+.qr-hint { color: var(--color-muted); font-size: 0.72rem; }
+.qr-loading { color: var(--color-muted); font-size: 0.85rem; text-align: center; padding: 1rem; }
+
+/* ---- QR Scanner ---- */
+.qr-scan-area { display: flex; justify-content: center; }
+.qr-video { width: 100%; max-width: 18rem; border-radius: 0.8rem; background: #000; aspect-ratio: 1; object-fit: cover; }
+.qr-manual-row { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.4rem; }
+.qr-manual-input { flex: 1; height: 2.6rem; border-radius: 0.6rem; border: 1px solid var(--color-border); background: var(--color-elevated); color: var(--color-fg); padding: 0 0.75rem; font-size: 1rem; text-transform: lowercase; }
+
+/* ---- Skins Store ---- */
+.skin-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; }
+.skin-cell { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; width: 4.5rem; padding: 0.5rem 0.4rem; border-radius: 0.8rem; background: var(--color-elevated); border: 1.5px solid transparent; }
+.skin-cell.is-on { border-color: var(--color-primary); }
+.skin-cell.is-locked { opacity: 0.5; }
+.skin-dot { width: 2rem; height: 2rem; border-radius: 999px; background: currentColor; }
+.skin-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-fg); }
+.skin-price { font-size: 0.62rem; color: var(--color-primary); font-family: var(--font-display); }
+.skin-req { font-size: 0.6rem; color: var(--color-muted); }
+.skin-aurora { color: #00ffaa; }
+.skin-sunset { color: #ff9a3c; }
+.skin-neon { color: #ff00ff; }
+.skin-crystal { color: #a8e6ff; }
+.skin-candy { color: #ff80ab; }
+
+/* ---- Super Kiss Store ---- */
+.super-balance { display: flex; align-items: baseline; justify-content: center; gap: 0.35rem; }
+.super-balance-num { font-family: var(--font-display); font-size: 2.4rem; color: var(--color-primary); }
+.super-balance-label { color: var(--color-muted); font-size: 0.75rem; }
+.super-bundles { display: flex; flex-direction: column; gap: 0.4rem; }
+.super-bundle { display: flex; align-items: center; justify-content: space-between; height: 3rem; border-radius: 0.8rem; background: var(--color-elevated); padding: 0 1rem; }
+.super-bundle-label { font-weight: 600; }
+.super-bundle-price { font-family: var(--font-display); color: var(--color-primary); }
+.super-sub { display: flex; align-items: center; justify-content: space-between; width: 100%; height: 3.4rem; border-radius: 0.8rem; background: var(--color-elevated); border: 1px solid var(--color-primary); padding: 0 1rem; }
+.super-sub-info { display: flex; flex-direction: column; gap: 0.1rem; text-align: left; }
+.super-sub-label { font-weight: 600; }
+.super-sub-desc { font-size: 0.68rem; color: var(--color-muted); }
+.super-sub-price { font-family: var(--font-display); color: var(--color-primary); }
+
+/* ---- Streak Badge ---- */
+.streak-badge { display: inline-flex; align-items: center; gap: 0.15rem; color: #ff6a1a; font-size: 0.65rem; font-family: var(--font-display); }
+
+/* ---- Find Friends button ---- */
+.find-friends-btn { margin-top: 0.5rem; width: 100%; height: 2.6rem; border-radius: 0.8rem; background: var(--color-elevated); color: var(--color-fg); font-size: 0.85rem; display: flex; align-items: center; justify-content: center; gap: 0.4rem; }

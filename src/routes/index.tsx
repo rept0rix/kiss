@@ -31,7 +31,11 @@ import { cropPhoto, loadMe, saveMe, type MeState } from "@/lib/me";
 import { askNotify, notifyKiss } from "@/lib/notify";
 import { playCelebrate, soundsOn, startMusic, unlockSound } from "@/lib/sound";
 import { canSuper, consumeSuper, openSuperWindow, superState } from "@/lib/super";
-import { Settings, Volume2, VolumeX } from "lucide-react";
+import { Settings, Volume2, VolumeX, QrCode as QrIcon, Users } from "lucide-react";
+import { QrScanner } from "@/components/qr-scanner";
+import { ContactImport } from "@/components/contact-import";
+import { SkinsStore } from "@/components/skins-store";
+import { SuperKissStore } from "@/components/super-kiss-store";
 
 type Search = { k?: string; p?: string };
 
@@ -117,6 +121,11 @@ function Home() {
   const [draftPhone, setDraftPhone] = useState("");
   const [superTick, setSuperTick] = useState(0);
   const [personBusy, setPersonBusy] = useState(false);
+  const [qrScanOpen, setQrScanOpen] = useState(false);
+  const [contactImportOpen, setContactImportOpen] = useState(false);
+  const [skinsOpen, setSkinsOpen] = useState(false);
+  const [superStoreOpen, setSuperStoreOpen] = useState(false);
+  const [selectedSkin, setSelectedSkin] = useState("classic");
   const liveUser = user && !user.isDevFallback ? user : null;
   const home = useHome(Boolean(liveUser));
   const phoneBox = usePhoneInbox(me.phone);
@@ -738,6 +747,14 @@ function Home() {
               {superState().windowMs > 0 ? ` · ${Math.ceil(superState().windowMs / 1000)}s` : " · 1 today"}
             </button>
           ) : null}
+          <div className="find-friends-row">
+            <button type="button" className="find-friends-btn" onClick={() => setQrScanOpen(true)}>
+              <QrIcon size={16} /> Scan QR
+            </button>
+            <button type="button" className="find-friends-btn" onClick={() => setContactImportOpen(true)}>
+              <Users size={16} /> Import Contacts
+            </button>
+          </div>
           <p className="connect-label">Connect friends</p>
           <div className="social-row">
             {GROK_PROVIDERS.map((p) => (

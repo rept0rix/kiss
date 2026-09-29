@@ -3,6 +3,7 @@ import { addPhoto, loadGallery, saveGallery, type Gallery } from "@/lib/gallery"
 import { listNicks } from "@/lib/kisses/server";
 import { Face } from "./face";
 import { LipsMark } from "./lips-mark";
+import { QrCodeSection } from "./qr-code-section";
 
 export function MyProfile({
   name,
@@ -62,6 +63,7 @@ export function MyProfile({
         ) : (
           <p className="person-ago">No nicknames yet</p>
         )}
+        <QrCodeSection phone={phone} name={name} />
         <p className="catch-pass-label">Kiss styles</p>
         <ul className="lip-pack">
           {Array.from({ length: 25 }, (_, i) => (
