@@ -246,14 +246,22 @@
   color: #e11d2e;
 }
 
-.boot-k-1, .boot-h-1 { width: 4.5rem; left: 8%; top: 12%; animation: kiss-fly-a 6s linear infinite; }
-.boot-k-2, .boot-h-2 { width: 3rem; right: 10%; top: 18%; animation: kiss-fly-b 7s linear infinite; }
-.boot-k-3, .boot-h-3 { width: 5.5rem; left: 18%; bottom: 16%; animation: kiss-fly-c 8s linear infinite; }
-.boot-k-4, .boot-h-4 { width: 2.4rem; right: 16%; bottom: 22%; animation: kiss-fly-a 5.5s linear infinite; animation-delay: -2s; }
-.boot-k-5, .boot-h-5 { width: 3.6rem; left: 42%; top: 8%; animation: kiss-fly-b 9s linear infinite; animation-delay: -1s; }
-.boot-k-6, .boot-h-6 { width: 2.8rem; left: 6%; top: 48%; animation: kiss-fly-c 6.5s linear infinite; animation-delay: -3s; }
-.boot-k-7, .boot-h-7 { width: 4rem; right: 8%; top: 52%; animation: kiss-fly-a 7.5s linear infinite; animation-delay: -4s; }
-.boot-k-8, .boot-h-8 { width: 3.2rem; left: 55%; bottom: 10%; animation: kiss-fly-b 8.5s linear infinite; animation-delay: -2.5s; }
+.boot-k-1, .boot-h-1 { width: 4.5rem; left: 8%; top: 12%; animation: boot-pop 2.8s ease-in-out infinite; animation-delay: 0s; }
+.boot-k-2, .boot-h-2 { width: 3rem; right: 10%; top: 18%; animation: boot-pop 2.8s ease-in-out infinite; animation-delay: 0.35s; }
+.boot-k-3, .boot-h-3 { width: 5.5rem; left: 18%; bottom: 16%; animation: boot-pop 2.8s ease-in-out infinite; animation-delay: 0.7s; }
+.boot-k-4, .boot-h-4 { width: 2.4rem; right: 16%; bottom: 22%; animation: boot-pop 2.8s ease-in-out infinite; animation-delay: 1.05s; }
+.boot-k-5, .boot-h-5 { width: 3.6rem; left: 42%; top: 8%; animation: boot-pop 2.8s ease-in-out infinite; animation-delay: 1.4s; }
+.boot-k-6, .boot-h-6 { width: 2.8rem; left: 6%; top: 48%; animation: boot-pop 2.8s ease-in-out infinite; animation-delay: 1.75s; }
+.boot-k-7, .boot-h-7 { width: 4rem; right: 8%; top: 52%; animation: boot-pop 2.8s ease-in-out infinite; animation-delay: 2.1s; }
+.boot-k-8, .boot-h-8 { width: 3.2rem; left: 55%; bottom: 10%; animation: boot-pop 2.8s ease-in-out infinite; animation-delay: 2.45s; }
+
+@keyframes boot-pop {
+  0% { transform: scale(0.3); opacity: 0; }
+  15% { transform: scale(1.1); opacity: 1; }
+  35% { transform: scale(1); opacity: 1; }
+  65% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.8); opacity: 0; }
+}
 
 .boot-meter {
   position: absolute;
@@ -504,31 +512,33 @@
 
 .name-line {
   margin-top: 0.35rem;
-  font-family: var(--font-display);
-  font-size: 1.7rem;
+  font-family: "Outfit", var(--font-sans);
+  font-weight: 800;
+  font-size: 1.2rem;
   line-height: 1.1;
-  letter-spacing: -0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .counts {
-  margin-top: 0.2rem;
-  font-size: 0.8rem;
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
   color: var(--color-muted);
 }
 
 .rank-bar {
-  width: min(16rem, 80vw);
-  margin-top: 0.45rem;
+  width: min(13rem, 70vw);
+  margin-top: 0.35rem;
 }
 
 .rank-name {
   display: flex;
   justify-content: space-between;
   gap: 0.5rem;
-  font-family: var(--font-display);
-  font-size: 0.85rem;
-  letter-spacing: 0.04em;
+  font-family: "Outfit", var(--font-sans);
+  font-weight: 700;
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
@@ -570,7 +580,7 @@
 
 .phone-line {
   margin-top: 0.15rem;
-  font-size: 0.8rem;
+  font-size: 0.7rem;
   color: var(--color-subtle);
   letter-spacing: 0.02em;
 }
@@ -1132,13 +1142,92 @@ body.sheet-open {
   to { transform: scale(1) rotate(-8deg); opacity: 1; }
 }
 
+/* ── Desktop wide layout ───────────────────────────── */
+.stage-left,
+.stage-right {
+  display: contents;
+}
+
+@media (min-width: 1024px) {
+  .stage {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 2.5rem;
+    padding-inline: 3rem;
+  }
+
+  .stage-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    text-align: right;
+    flex: 1;
+    max-width: 22rem;
+    gap: 0.35rem;
+  }
+
+  .stage-right {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    flex: 1;
+    max-width: 22rem;
+    gap: 1rem;
+    justify-content: flex-end;
+  }
+
+  .stage .orbit {
+    order: 2;
+    width: 28rem;
+    height: 28rem;
+    max-height: 78dvh;
+    margin-top: 0;
+    flex: 0 0 auto;
+  }
+
+  .stage-left { order: 1; }
+  .stage-right { order: 3; }
+
+  .orbit-photo,
+  .orbit-empty {
+    width: 9rem;
+    height: 9rem;
+  }
+
+  .orbit-chip { width: 4.2rem; }
+  .chip-face,
+  .chip-photo,
+  .chip-initials,
+  .chip-face .face-init { width: 3.6rem; height: 3.6rem; }
+
+  .name-line { font-size: 2rem; }
+
+  .counts { margin-top: 0.4rem; font-size: 0.9rem; }
+  .phone-line { font-size: 0.85rem; }
+
+  .live-row {
+    flex-direction: column;
+    width: 100%;
+    gap: 0.5rem;
+    overflow: visible;
+  }
+
+  .stage .dock {
+    margin-top: auto;
+    max-width: 100%;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .fly-kiss,
   .fly-heart,
   .kiss-enter,
   .kiss-ring,
-  .burst-bit {
+  .burst-bit,
+  .boot-bit {
     animation: none;
+    opacity: 0.5;
   }
 }
 

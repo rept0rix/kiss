@@ -1,3 +1,5 @@
+import { playActiveTrack, stopTrack } from "./music";
+
 const KEY = "kiss-sound-v1";
 const SAMPLES = ["/sounds/kiss-1.mp3", "/sounds/kiss-2.mp3", "/sounds/kiss-3.mp3", "/sounds/kiss-4.mp3"];
 const SUPER_SAMPLE = "/sounds/kiss-super.mp3";
@@ -14,7 +16,6 @@ let prefs: SoundPrefs = loadPrefs();
 let ctx: AudioContext | null = null;
 const buffers = new Map<string, AudioBuffer>();
 let sampleI = 0;
-let bed: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
 
 function loadPrefs(): SoundPrefs {
   if (typeof window === "undefined") return { ...DEFAULT };
@@ -91,35 +92,17 @@ function playBuffer(buf: AudioBuffer, gain = 0.85): void {
 
 export function unlockSound(): void {
   audio();
-  for (const src of [...SAMPLES, SUPER_SAMPLE, "/sounds/bed.mp3"]) void loadBuffer(src);
+  for (const src of [...SAMPLES, SUPER_SAMPLE]) void loadBuffer(src);
+  startMusic();
 }
 
 export function startMusic(): void {
   if (!prefs.music) return;
-  const ac = audio();
-  if (!ac || bed) return;
-  void loadBuffer("/sounds/bed.mp3").then((buf) => {
-    if (!buf || bed || !prefs.music) return;
-    const src = ac.createBufferSource();
-    src.buffer = buf;
-    src.loop = true;
-    const g = ac.createGain();
-    g.gain.value = 0.045;
-    src.connect(g);
-    g.connect(ac.destination);
-    src.start();
-    bed = { src, gain: g };
-  });
+  void playActiveTrack();
 }
 
 export function stopMusic(): void {
-  if (!bed) return;
-  try {
-    bed.src.stop();
-  } catch {
-    /* ignore */
-  }
-  bed = null;
+  stopTrack();
 }
 
 let lastKissAt = 0;

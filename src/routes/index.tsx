@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { invalidateHome, invalidatePhoneInbox, useHome, usePhoneHome, usePhoneInbox, usePhoneStats } from "@/hooks/use-home";
 import { useKeyboardInset } from "@/hooks/use-keyboard";
-import { GROK_PROVIDERS, authEnabled, signIn } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { blockPhone, catchKiss, catchPhoneKiss, lookupFace, registerPhone, searchDirectory, sendKiss, sendPhoneKiss, setDisplayName, setPhone, unblockPhone } from "@/lib/kisses/server";
 import { isLive } from "@/lib/kisses/online";
@@ -31,7 +30,13 @@ import { cropPhoto, loadMe, saveMe, type MeState } from "@/lib/me";
 import { askNotify, notifyKiss } from "@/lib/notify";
 import { playCelebrate, soundsOn, startMusic, unlockSound } from "@/lib/sound";
 import { canSuper, consumeSuper, openSuperWindow, superState } from "@/lib/super";
-import { Settings, Volume2, VolumeX } from "lucide-react";
+import { getSuperBalance } from "@/lib/store/server";
+import { MoreHorizontal, Settings, Volume2, VolumeX } from "lucide-react";
+import { MoreMenu } from "@/components/more-menu";
+import { QrScanner } from "@/components/qr-scanner";
+import { ContactImport } from "@/components/contact-import";
+import { SkinsStore } from "@/components/skins-store";
+import { SuperKissStore } from "@/components/super-kiss-store";
 
 type Search = { k?: string; p?: string };
 
@@ -117,6 +122,13 @@ function Home() {
   const [draftPhone, setDraftPhone] = useState("");
   const [superTick, setSuperTick] = useState(0);
   const [personBusy, setPersonBusy] = useState(false);
+  const [qrScanOpen, setQrScanOpen] = useState(false);
+  const [contactImportOpen, setContactImportOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [skinsOpen, setSkinsOpen] = useState(false);
+  const [superStoreOpen, setSuperStoreOpen] = useState(false);
+  const [superCount, setSuperCount] = useState(0);
+  const [selectedSkin, setSelectedSkin] = useState("classic");
   const liveUser = user && !user.isDevFallback ? user : null;
   const home = useHome(Boolean(liveUser));
   const phoneBox = usePhoneInbox(me.phone);
@@ -342,6 +354,11 @@ function Home() {
   }, []);
 
   useEffect(() => {
+    if (!isPhoneIdentity(me.phone)) return;
+    void getSuperBalance({ data: me.phone }).then((r) => setSuperCount(r.balance ?? 0)).catch(() => undefined);
+  }, [me.phone, sendOpen]);
+
+  useEffect(() => {
     if (!me.entered) return;
     let gone = false;
     void searchDirectory({ data: { q: "", myPhone: me.phone } }).then((rows) => {
@@ -432,6 +449,7 @@ function Home() {
   const photo = me.photo || liveUser?.profileImageUrl || null;
   const sent = serverSent ?? me.sent;
   const received = serverReceived ?? me.received;
+  const kissTotal = sent + received;
   const phoneOk = isValidPhone(me.phone || home.data?.profile?.phone || search.p || "");
   const nameOk = (me.name || "").trim().length >= 2;
 
@@ -548,7 +566,7 @@ function Home() {
         <KissOrbit
           photo={photo}
           items={orbit}
-          onAddPhoto={() => setProfileOpen(true)}
+          onAddPhoto={() => setPhotoOpen(true)}
           onEmpty={() => {
             setSendTarget(null);
             setSendOpen(true);
@@ -589,7 +607,7 @@ function Home() {
           }}
           onReply={(item) => {
             if (item.userId && liveUser) {
-              void sendKiss({ data: { toUserId: item.userId, kind: rankAt(sent).skin } })
+              void sendKiss({ data: { toUserId: item.userId, kind: rankAt(kissTotal).skin } })
                 .then(() => {
                   setMe((prev) => {
                     const next = {
@@ -636,6 +654,7 @@ function Home() {
           }}
         />
 
+        <div className="stage-left">
         <NameLine
           value={displayName}
           onChange={(name) => {
@@ -655,7 +674,9 @@ function Home() {
           <span className="mx-2 text-subtle">·</span>
           <span className="tabular-nums text-fg">{received}</span> caught
         </p>
-        <RankBar kisses={sent} />
+        <RankBar kisses={kissTotal} />
+        </div>
+        <div className="stage-right">
 
         {(home.data?.people ?? []).filter((p) => {
           const n = p.displayName.trim().toLowerCase();
@@ -675,7 +696,7 @@ function Home() {
                   className="live-pill"
                   onClick={() => {
                     if (!liveUser) return;
-                    void sendKiss({ data: { toUserId: p.userId, kind: rankAt(sent).skin } }).then(
+                    void sendKiss({ data: { toUserId: p.userId, kind: rankAt(kissTotal).skin } }).then(
                       () => {
                         setMe((prev) => {
                           const next = {
@@ -688,7 +709,7 @@ function Home() {
                                 name: p.displayName,
                                 status: "waiting" as const,
                                 userId: p.userId,
-                                skin: rankAt(sent).skin,
+                                skin: rankAt(kissTotal).skin,
                               },
                               ...prev.orbit,
                             ].slice(0, 16),
@@ -711,22 +732,10 @@ function Home() {
         ) : null}
 
         <div className="dock">
-          <Button
-            size="lg"
-            className="h-14 w-full rounded-xl font-display text-xl"
-            onClick={() => {
-              unlockSound();
-              askNotify();
-              setSendTarget(null);
-              setSendOpen(true);
-            }}
-          >
-            Send kiss
-          </Button>
-          {canSuper() ? (
-            <button
-              type="button"
-              className="super-dock"
+          <div className="relative">
+            <Button
+              size="lg"
+              className="h-14 w-full rounded-xl font-display text-xl"
               onClick={() => {
                 unlockSound();
                 askNotify();
@@ -734,50 +743,17 @@ function Home() {
                 setSendOpen(true);
               }}
             >
-              Super kiss
-              {superState().windowMs > 0 ? ` · ${Math.ceil(superState().windowMs / 1000)}s` : " · 1 today"}
-            </button>
-          ) : null}
-          <p className="connect-label">Connect friends</p>
-          <div className="social-row">
-            {GROK_PROVIDERS.map((p) => (
-              <button
-                key={p.providerId}
-                type="button"
-                className="social-ic"
-                aria-label={p.label}
-                onClick={() => {
-                  if (authEnabled) signIn(p.providerId, { callbackURL: "/" });
-                }}
-              >
-                {p.idp === "google" ? (
-                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
-                    <path fill="#ea4335" d="M12 10.2v3.6h5.1c-.2 1.2-1.3 3.6-5.1 3.6-3.1 0-5.6-2.5-5.6-5.6S8.9 6.2 12 6.2c1.8 0 3 .7 3.7 1.4l2.5-2.4C16.7 3.7 14.6 2.8 12 2.8 6.9 2.8 2.8 6.9 2.8 12S6.9 21.2 12 21.2c5.2 0 8.6-3.6 8.6-8.7 0-.6 0-1-.1-1.5H12z" />
-                  </svg>
-                ) : (
-                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden>
-                    <path fill="currentColor" d="M14.5 10.6 22 2h-2.2l-6.5 7.4L8.1 2H2l7.9 11.3L2 22h2.2l7.1-8.1L15.9 22H22l-7.5-11.4Zm-2.5 2.9-.8-1.2-6.5-9.2h2.8l5.2 7.5.8 1.2 6.7 9.7h-2.8l-5.4-7.9Z" />
-                  </svg>
-                )}
-              </button>
-            ))}
-            <button
-              type="button"
-              className="social-ic"
-              aria-label="WhatsApp"
-              onClick={() => {
-                setSendTarget(null);
-                setSendOpen(true);
-              }}
-            >
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
-                <path
-                  fill="#25D366"
-                  d="M12.04 2C6.58 2 2.15 6.4 2.15 11.86c0 1.74.46 3.44 1.34 4.94L2 22l5.35-1.4a9.86 9.86 0 0 0 4.69 1.2h.01c5.46 0 9.89-4.4 9.89-9.86C21.94 6.4 17.5 2 12.04 2Zm5.76 14.17c-.24.68-1.4 1.25-1.94 1.33-.5.07-1.13.1-1.82-.11-.42-.13-.96-.31-1.66-.61-2.92-1.26-4.82-4.2-4.97-4.4-.14-.2-1.18-1.57-1.18-3 0-1.42.75-2.12 1.01-2.41.24-.27.64-.39 1.02-.39.12 0 .23 0 .33.01.3.01.44-.09.69.53.24.63.83 2.04.9 2.19.08.15.12.33.02.53-.1.2-.15.33-.3.5-.14.18-.3.4-.43.53-.14.14-.29.3-.12.58.16.29.73 1.2 1.57 1.95 1.08.96 1.99 1.26 2.27 1.4.28.14.45.12.61-.07.17-.2.7-.81.89-1.09.18-.27.37-.23.62-.14.26.09 1.63.77 1.91.91.28.14.46.21.53.33.07.12.07.68-.17 1.36Z"
-                />
-              </svg>
-            </button>
+              Send kiss
+            </Button>
+            <div className={`super-badge ${superCount > 0 ? "" : "is-off"}`} aria-hidden>
+              <b>{superCount}</b>
+              <i>SUPER</i>
+            </div>
           </div>
+          <button type="button" className="dock-more" onClick={() => setMoreOpen(true)}>
+            <MoreHorizontal size={16} /> More
+          </button>
+        </div>
         </div>
       </div>
       </KissSky>
@@ -788,10 +764,11 @@ function Home() {
         myPhone={me.phone}
         myPhoto={loadGallery().send || me.photo}
         signedIn={Boolean(liveUser)}
-        mySent={sent}
+        mySent={kissTotal}
         people={home.data?.people ?? []}
         known={me.orbit.map((o) => ({ name: o.name, tel: o.tel, photo: o.photo }))}
         target={sendTarget}
+        superCount={superCount}
         onClose={() => {
           setSendOpen(false);
           setSendTarget(null);
@@ -805,7 +782,7 @@ function Home() {
             photo: payload.photo ?? null,
             tel: payload.tel,
             userId: payload.userId,
-            skin: rankAt(sent).skin,
+            skin: rankAt(kissTotal).skin,
           };
           setMe((prev) => {
             const next = {
@@ -868,6 +845,44 @@ function Home() {
           onDelete={() => setAskDelete(true)}
         />
       ) : null}
+      <MoreMenu
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        onProfile={() => setProfileOpen(true)}
+        onScan={() => setQrScanOpen(true)}
+        onImport={() => setContactImportOpen(true)}
+        onSkins={() => setSkinsOpen(true)}
+        onSuper={() => setSuperStoreOpen(true)}
+        onSettings={() => setSettings(true)}
+      />
+      <QrScanner
+        open={qrScanOpen}
+        onClose={() => setQrScanOpen(false)}
+        onScan={({ phone, name }) => {
+          setQrScanOpen(false);
+          setSendTarget({ name, tel: phone, photo: null } as SendTarget);
+          setSendOpen(true);
+        }}
+      />
+      <ContactImport
+        open={contactImportOpen}
+        myPhone={me.phone}
+        myName={displayName}
+        mySent={kissTotal}
+        onClose={() => setContactImportOpen(false)}
+        onImported={() => {
+          void invalidatePhoneInbox();
+        }}
+      />
+      <SkinsStore
+        open={skinsOpen}
+        phone={me.phone}
+        mySent={kissTotal}
+        selectedSkin={selectedSkin}
+        onClose={() => setSkinsOpen(false)}
+        onSelect={setSelectedSkin}
+      />
+      <SuperKissStore open={superStoreOpen} phone={me.phone} onClose={() => setSuperStoreOpen(false)} />
       <Confirm
         open={askDelete}
         title="Delete me?"
@@ -898,7 +913,7 @@ function Home() {
             // why instead of quietly leaving a kiss that never existed.
             let request: Promise<unknown>;
             if (appUser && liveUser) {
-              request = sendKiss({ data: { toUserId: appUser, kind: rankAt(sent).skin } });
+              request = sendKiss({ data: { toUserId: appUser, kind: rankAt(kissTotal).skin } });
             } else if (tel && isPhoneIdentity(me.phone) && isPhoneIdentity(tel)) {
               request = sendPhoneKiss({
                 data: {
@@ -906,7 +921,7 @@ function Home() {
                   fromName: me.name,
                   toPhone: tel,
                   count: 1,
-                  kind: rankAt(sent).skin,
+                  kind: rankAt(kissTotal).skin,
                 },
               });
             } else {
@@ -1003,7 +1018,7 @@ function Home() {
             );
             nextLive();
             if (person && liveUser) {
-              void sendKiss({ data: { toUserId: person.userId, kind: rankAt(sent).skin, count: 1 } }).then(
+              void sendKiss({ data: { toUserId: person.userId, kind: rankAt(kissTotal).skin, count: 1 } }).then(
                 () => {
                   celebrate();
                   void invalidateHome();
@@ -1067,7 +1082,7 @@ function Home() {
             nextLive();
             if (person && liveUser) {
               void sendKiss({
-                data: { toUserId: person.userId, kind: rankAt(sent).skin, count: 21 },
+                data: { toUserId: person.userId, kind: rankAt(kissTotal).skin, count: 21 },
               }).then(() => {
                 setMe((prev) => {
                   const next = { ...prev, sent: prev.sent + 21 };

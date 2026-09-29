@@ -7,7 +7,6 @@ node_modules/
 attachments/
 artifacts/
 .grok/
-AGENTS.md
 AGENTS.project.md
 *.tsbuildinfo
 .DS_Store
