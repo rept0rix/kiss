@@ -15,6 +15,7 @@ import { Route as InboxRouteImport } from './routes/inbox'
 import { Route as LiveRouteImport } from './routes/live'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as ApiAuthProvidersRouteImport } from './routes/api/auth-providers'
 import { Route as CCodeRouteImport } from './routes/c.$code'
 import { Route as KFromRouteImport } from './routes/k.$from'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -50,6 +51,11 @@ const ProfileRoute = ProfileRouteImport.update({
   path: '/profile',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAuthProvidersRoute = ApiAuthProvidersRouteImport.update({
+  id: '/api/auth-providers',
+  path: '/api/auth-providers',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CCodeRoute = CCodeRouteImport.update({
   id: '/c/$code',
   path: '/c/$code',
@@ -78,6 +84,7 @@ export interface FileRoutesByFullPath {
   '/live': typeof LiveRoute
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
+  '/api/auth-providers': typeof ApiAuthProvidersRoute
   '/c/$code': typeof CCodeRoute
   '/k/$from': typeof KFromRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -90,6 +97,7 @@ export interface FileRoutesByTo {
   '/live': typeof LiveRoute
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
+  '/api/auth-providers': typeof ApiAuthProvidersRoute
   '/c/$code': typeof CCodeRoute
   '/k/$from': typeof KFromRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -103,6 +111,7 @@ export interface FileRoutesById {
   '/live': typeof LiveRoute
   '/login': typeof LoginRoute
   '/profile': typeof ProfileRoute
+  '/api/auth-providers': typeof ApiAuthProvidersRoute
   '/c/$code': typeof CCodeRoute
   '/k/$from': typeof KFromRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -117,6 +126,7 @@ export interface FileRouteTypes {
     | '/live'
     | '/login'
     | '/profile'
+    | '/api/auth-providers'
     | '/c/$code'
     | '/k/$from'
     | '/api/auth/$'
@@ -129,6 +139,7 @@ export interface FileRouteTypes {
     | '/live'
     | '/login'
     | '/profile'
+    | '/api/auth-providers'
     | '/c/$code'
     | '/k/$from'
     | '/api/auth/$'
@@ -141,6 +152,7 @@ export interface FileRouteTypes {
     | '/live'
     | '/login'
     | '/profile'
+    | '/api/auth-providers'
     | '/c/$code'
     | '/k/$from'
     | '/api/auth/$'
@@ -154,6 +166,7 @@ export interface RootRouteChildren {
   LiveRoute: typeof LiveRoute
   LoginRoute: typeof LoginRoute
   ProfileRoute: typeof ProfileRoute
+  ApiAuthProvidersRoute: typeof ApiAuthProvidersRoute
   CCodeRoute: typeof CCodeRoute
   KFromRoute: typeof KFromRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -204,6 +217,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/auth-providers': {
+      id: '/api/auth-providers'
+      path: '/api/auth-providers'
+      fullPath: '/api/auth-providers'
+      preLoaderRoute: typeof ApiAuthProvidersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/c/$code': {
       id: '/c/$code'
       path: '/c/$code'
@@ -242,6 +262,7 @@ const rootRouteChildren: RootRouteChildren = {
   LiveRoute: LiveRoute,
   LoginRoute: LoginRoute,
   ProfileRoute: ProfileRoute,
+  ApiAuthProvidersRoute: ApiAuthProvidersRoute,
   CCodeRoute: CCodeRoute,
   KFromRoute: KFromRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,

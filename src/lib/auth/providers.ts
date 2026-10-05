@@ -1,31 +1,53 @@
 /**
- * The upstream identity providers this app offers for sign-in (via the broker).
+ * The identity providers this app can offer for sign-in.
  *
- * Source of truth for BOTH the server (`server.ts`, one `genericOAuth` provider
- * per entry) and the client (`client.ts` / sign-in buttons). Kept in its own
- * dependency-free module so the client can import it without pulling the
- * server-only Better Auth instance (and `pg`) into the browser bundle.
+ * Source of truth for BOTH the server (`server.ts`) and the client (`client.ts`
+ * / sign-in buttons). Kept in its own dependency-free module so the client can
+ * import it without pulling the server-only Better Auth instance (and `pg`)
+ * into the browser bundle. Which entries are actually enabled is decided at
+ * runtime from env (`auth-env.ts`) and served by `/api/auth-providers`.
  *
- * Each app federates to the shared **auth broker** (`GROK_AUTH_ISSUER`), which
- * holds the real Google/X secrets. The app never sees them — it only knows its
- * own per-app client id/secret and which upstream to ask the broker for (`idp`).
- *
- * To add an upstream (e.g. GitHub) once the broker supports it: add one entry
- * here (`{ providerId: "grok-github", idp: "github", label: "GitHub" }`). The
- * `providerId` is this app's local id and the OAuth callback path segment
- * (`/api/auth/oauth2/callback/<providerId>`); `idp` is the hint the broker reads
- * to pick the upstream (Better Auth's id for X is still `twitter`).
+ * - `social`: this app's own Google / X OAuth apps via Better Auth
+ *   `socialProviders`. `id` is Better Auth's provider id and the callback path
+ *   segment (`/api/auth/callback/<id>`).
+ * - `broker`: federation through the Grok auth broker (`GROK_AUTH_ISSUER`) via
+ *   `genericOAuth` — used by the sandbox live preview. `id` is this app's local
+ *   provider id (`/api/auth/oauth2/callback/<id>`); `idp` is the upstream hint
+ *   the broker reads (Better Auth's id for X is `twitter`).
  */
-export type GrokProvider = {
-  /** This app's local provider id; also the callback path segment. */
-  providerId: string;
-  /** Upstream hint the broker forwards to (Better Auth social id). */
-  idp: string;
-  /** Human label for the sign-in button. */
+export type SocialProvider = {
+  id: "google" | "twitter";
   label: string;
+  kind: "social";
 };
 
-export const GROK_PROVIDERS: readonly GrokProvider[] = [
-  { providerId: "grok-google", idp: "google", label: "Google" },
-  { providerId: "grok-x", idp: "twitter", label: "X" },
+export type BrokerProvider = {
+  id: string;
+  label: string;
+  kind: "broker";
+  idp: string;
+};
+
+export type AuthProvider = SocialProvider | BrokerProvider;
+
+/** Client-safe shape reported by `/api/auth-providers`. */
+export type EnabledProvider = Pick<AuthProvider, "id" | "label" | "kind">;
+
+export const SOCIAL_PROVIDERS: readonly SocialProvider[] = [
+  { id: "google", label: "Google", kind: "social" },
+  { id: "twitter", label: "X", kind: "social" },
 ];
+
+export const BROKER_PROVIDERS: readonly BrokerProvider[] = [
+  { id: "grok-google", label: "Google", kind: "broker", idp: "google" },
+  { id: "grok-x", label: "X", kind: "broker", idp: "twitter" },
+];
+
+export const AUTH_PROVIDERS: readonly AuthProvider[] = [...SOCIAL_PROVIDERS, ...BROKER_PROVIDERS];
+
+export function findProvider(id: string): AuthProvider | undefined {
+  return AUTH_PROVIDERS.find((p) => p.id === id);
+}
+
+/** Endpoint (outside Better Auth's `/api/auth/*`) listing enabled providers. */
+export const AUTH_PROVIDERS_PATH = "/api/auth-providers";
