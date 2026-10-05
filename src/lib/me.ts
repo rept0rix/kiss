@@ -1,7 +1,10 @@
+import { jpegWithin, PHOTO_MAX_CHARS, PHOTO_PX } from "./jpeg";
 import type { OrbitItem } from "./kisses/types";
 
 const KEY = "kiss-me-v2";
 const ID_KEY = "kiss-id-v1";
+/** One full-size profile photo per orbit chip; 12 chips stay near 1 MB of localStorage. */
+const ORBIT_PHOTO_MAX_CHARS = PHOTO_MAX_CHARS + 10000;
 
 export type MeState = {
   entered: boolean;
@@ -74,7 +77,7 @@ export function saveMe(next: MeState): void {
       photo: next.photo,
       orbit: next.orbit.slice(0, 12).map((o) => ({
         ...o,
-        photo: o.photo && o.photo.length > 12000 ? null : o.photo,
+        photo: o.photo && o.photo.length > ORBIT_PHOTO_MAX_CHARS ? null : o.photo,
       })),
     };
     window.localStorage.setItem(KEY, JSON.stringify(slim));
@@ -143,7 +146,7 @@ export function cropPhoto(file: File): Promise<string> {
     const url = URL.createObjectURL(file);
     img.onload = () => {
       const canvas = document.createElement("canvas");
-      const size = 280;
+      const size = PHOTO_PX;
       canvas.width = size;
       canvas.height = size;
       const ctx = canvas.getContext("2d");
@@ -157,7 +160,7 @@ export function cropPhoto(file: File): Promise<string> {
       const sy = (img.height - s) / 2;
       ctx.drawImage(img, sx, sy, s, s, 0, 0, size, size);
       URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL("image/jpeg", 0.7));
+      resolve(jpegWithin(canvas, PHOTO_MAX_CHARS));
     };
     img.onerror = () => {
       URL.revokeObjectURL(url);

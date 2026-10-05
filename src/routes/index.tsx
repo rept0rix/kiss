@@ -16,12 +16,13 @@ import { SoundSettings } from "@/components/sound-settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { invalidateHome, invalidatePhoneInbox, useHome, usePhoneHome, usePhoneInbox, usePhoneStats } from "@/hooks/use-home";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { useKeyboardInset } from "@/hooks/use-keyboard";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { blockPhone, catchKiss, catchPhoneKiss, lookupFace, registerPhone, searchDirectory, sendKiss, sendPhoneKiss, setDisplayName, setPhone, unblockPhone } from "@/lib/kisses/server";
 import { isLive } from "@/lib/kisses/online";
 import { nextRank, rankAt } from "@/lib/kisses/ranks";
-import type { HomePayload, OrbitItem } from "@/lib/kisses/types";
+import type { HomePayload, OrbitItem, PublicPerson } from "@/lib/kisses/types";
 import { formatPhone, isPhoneIdentity, isValidPhone, loadRecents, phoneDigits, prettyPersonName, shrinkDataUrl } from "@/lib/contacts";
 import { blockLocal, isBlocked, unblockLocal } from "@/lib/block";
 import { phonesMatch } from "@/lib/phone";
@@ -73,6 +74,7 @@ function Home() {
   const { user } = useCurrentUserState();
   const search = useSearch({ from: "/" });
   const navigate = useNavigate();
+  const hydrated = useHydrated();
   const [me, setMe] = useState<MeState>(() => loadMe());
   const [burst, setBurst] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
@@ -139,6 +141,8 @@ function Home() {
     ? { inbox: home.data.inbox, sent: home.data.sent }
     : phoneOrbit.data;
   const serverOrbitReady = Boolean(home.data || phoneOrbit.isFetched);
+  // phone_book faces from the directory, for orbit people whose kiss rows came without one.
+  const [directory, setDirectory] = useState<PublicPerson[]>([]);
 
   // Home counters come from Neon whenever Neon has an answer. getHome already
   // folds in phone kisses for a profile whose phone is this phone; otherwise
@@ -227,13 +231,13 @@ function Home() {
   useEffect(() => {
     if (!me.entered || !serverOrbitReady) return;
     // Server-trusted: drop local-only QA leftovers even when Neon orbit is empty.
-    const hydratedOrbit = mergeOrbit(me.orbit, serverOrbitData, { trustServer: true });
+    const hydratedOrbit = mergeOrbit(me.orbit, serverOrbitData, { trustServer: true, directory });
     const orbitChanged = JSON.stringify(hydratedOrbit.slice(0, 12)) !== JSON.stringify(me.orbit.slice(0, 12));
     if (orbitChanged || (me.orbit.length > 0 && hydratedOrbit.length === 0)) {
       patch({ orbit: hydratedOrbit.slice(0, 12) });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [home.data?.inbox, home.data?.sent, phoneOrbit.data, serverOrbitReady]);
+  }, [home.data?.inbox, home.data?.sent, phoneOrbit.data, serverOrbitReady, directory]);
 
   useEffect(() => {
     const theirPhone = home.data?.profile?.phone;
@@ -250,7 +254,9 @@ function Home() {
       .then((hit) => {
         if (gone || (!hit.photo && !hit.name)) return;
         setMe((prev) => {
-          const nextPhoto = hit.photo || prev.photo;
+          // Older builds saved a 160px copy to Neon; never swap a sharper local photo for it.
+          const localSharper = Boolean(prev.photo && hit.photo && prev.photo.length > hit.photo.length);
+          const nextPhoto = localSharper ? prev.photo : hit.photo || prev.photo;
           const nextName = prev.name || hit.name || "";
           if (nextPhoto === prev.photo && nextName === prev.name) return prev;
           const next = { ...prev, photo: nextPhoto, name: nextName, entered: true };
@@ -344,8 +350,8 @@ function Home() {
   }, [phoneBox.data]);
 
   const orbit = useMemo(
-    () => mergeOrbit(me.orbit, serverOrbitData, { trustServer: serverOrbitReady }),
-    [me.orbit, serverOrbitData, serverOrbitReady],
+    () => mergeOrbit(me.orbit, serverOrbitData, { trustServer: serverOrbitReady, directory }),
+    [me.orbit, serverOrbitData, serverOrbitReady, directory],
   );
 
   useEffect(() => {
@@ -363,6 +369,7 @@ function Home() {
     let gone = false;
     void searchDirectory({ data: { q: "", myPhone: me.phone } }).then((rows) => {
       if (gone) return;
+      setDirectory(rows.filter((r) => r.photo));
       const recents = loadRecents();
       setMe((prev) => {
         let changed = false;
@@ -377,7 +384,7 @@ function Home() {
               r.displayName.toLowerCase() === o.name.toLowerCase() ||
               (o.tel && r.phone && r.phone.slice(-8) === o.tel.replace(/\D/g, "").slice(-8)),
           );
-          const photo = o.photo || rec?.photo || hit?.photo || null;
+          const photo = hit?.photo || o.photo || rec?.photo || null;
           if (photo === o.photo) return o;
           changed = true;
           return { ...o, photo, tel: o.tel || rec?.tel || hit?.phone || o.tel, realName: o.realName || o.name };
@@ -406,7 +413,9 @@ function Home() {
   }, [me.entered, bootReady]);
 
   if (!bootReady) {
-    if (me.entered) {
+    // The server cannot read localStorage, so it always renders the splash;
+    // skip it for returning users only after hydration.
+    if (hydrated && me.entered) {
       setBootReady(true);
       return null;
     }
@@ -802,13 +811,12 @@ function Home() {
         open={photoOpen}
         onClose={() => setPhotoOpen(false)}
         onFile={(file) => {
-          void cropPhoto(file).then(async (data) => {
+          void cropPhoto(file).then((data) => {
             rememberPhoto(data);
             const g = addPhoto(data);
             patch({ photo: g.main || data });
             if (me.phone) {
-              const photo = await shrinkDataUrl(data, 160);
-              void registerPhone({ data: { phone: me.phone, name: me.name, photo } }).catch(() => undefined);
+              void registerPhone({ data: { phone: me.phone, name: me.name, photo: data } }).catch(() => undefined);
             }
           });
         }}
@@ -827,7 +835,7 @@ function Home() {
             saveGallery({ ...g, main: p });
             patch({ photo: p });
             if (me.phone) {
-              const photo = await shrinkDataUrl(p, 160);
+              const photo = await shrinkDataUrl(p);
               void registerPhone({ data: { phone: me.phone, name: me.name, photo } }).catch(() => undefined);
             }
           }}
@@ -1103,9 +1111,10 @@ function Home() {
 function mergeOrbit(
   local: OrbitItem[],
   data: Pick<HomePayload, "inbox" | "sent"> | undefined,
-  opts?: { trustServer?: boolean },
+  opts?: { trustServer?: boolean; directory?: PublicPerson[] },
 ): OrbitItem[] {
   const trustServer = Boolean(opts?.trustServer);
+  const directory = opts?.directory ?? [];
   const people = new Map<string, OrbitItem>();
 
   function personKey(name: string, userId?: string) {
@@ -1140,7 +1149,11 @@ function mergeOrbit(
 
   const photoOf = (name: string, tel?: string) => {
     const recents = loadRecents();
+    const tail = tel ? tel.replace(/\D/g, "").slice(-8) : "";
     return (
+      directory.find((d) =>
+        tail ? d.phone?.replace(/\D/g, "").slice(-8) === tail : d.displayName.toLowerCase() === name.toLowerCase(),
+      )?.photo ??
       local.find((l) => l.name.toLowerCase() === name.toLowerCase() && l.photo)?.photo ??
       recents.find((c) => c.name.toLowerCase() === name.toLowerCase())?.photo ??
       (tel
@@ -1169,7 +1182,7 @@ function mergeOrbit(
       name: k.fromName,
       status: list.some((x) => !x.caughtAt) ? "waiting" : "caught",
       serverId: list.find((x) => !x.caughtAt)?.id ?? k.id,
-      photo: photoOf(k.fromName, tel),
+      photo: list.find((x) => x.photo)?.photo ?? photoOf(k.fromName, tel),
       hue: k.fromHue,
       tel,
       skin: k.kind,
@@ -1196,7 +1209,7 @@ function mergeOrbit(
       name: k.toName,
       status: list.every((x) => x.caught) ? "caught" : "waiting",
       serverId: k.id,
-      photo: photoOf(k.toName, tel),
+      photo: list.find((x) => x.photo)?.photo ?? photoOf(k.toName, tel),
       tel,
       userId: k.toUserId,
       toMe: 0,
@@ -1219,7 +1232,7 @@ function mergeOrbit(
       const cur = people.get(key)!;
       const photo = list.find((x) => x.photo)?.photo;
       const tel = list.find((x) => x.tel)?.tel;
-      if (photo) cur.photo = photo;
+      if (photo && !cur.photo) cur.photo = photo;
       if (tel) cur.tel = tel;
       continue;
     }

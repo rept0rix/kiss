@@ -1,3 +1,8 @@
+import { jpegWithin } from "./jpeg";
+
+/** createShareLink cuts cards past 350000 chars, which would break the image. */
+const CARD_MAX_CHARS = 340000;
+
 export function buildKissCard(photo: string | null, name: string): Promise<string | null> {
   if (typeof window === "undefined") return Promise.resolve(null);
   return new Promise((resolve) => {
@@ -36,7 +41,7 @@ export function buildKissCard(photo: string | null, name: string): Promise<strin
       ctx.fillStyle = "#e11d2e";
       ctx.font = "700 28px IBM Plex Sans, sans-serif";
       ctx.fillText("a kiss from me is waiting", 600, 602);
-      resolve(canvas.toDataURL("image/jpeg", 0.55));
+      resolve(jpegWithin(canvas, CARD_MAX_CHARS));
     };
 
     if (!photo) {
