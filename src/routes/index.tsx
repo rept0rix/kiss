@@ -16,6 +16,7 @@ import { SoundSettings } from "@/components/sound-settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { invalidateHome, invalidatePhoneInbox, useHome, usePhoneHome, usePhoneInbox, usePhoneStats } from "@/hooks/use-home";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { useKeyboardInset } from "@/hooks/use-keyboard";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { blockPhone, catchKiss, catchPhoneKiss, lookupFace, registerPhone, searchDirectory, sendKiss, sendPhoneKiss, setDisplayName, setPhone, unblockPhone } from "@/lib/kisses/server";
@@ -73,6 +74,7 @@ function Home() {
   const { user } = useCurrentUserState();
   const search = useSearch({ from: "/" });
   const navigate = useNavigate();
+  const hydrated = useHydrated();
   const [me, setMe] = useState<MeState>(() => loadMe());
   const [burst, setBurst] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
@@ -411,7 +413,9 @@ function Home() {
   }, [me.entered, bootReady]);
 
   if (!bootReady) {
-    if (me.entered) {
+    // The server cannot read localStorage, so it always renders the splash;
+    // skip it for returning users only after hydration.
+    if (hydrated && me.entered) {
       setBootReady(true);
       return null;
     }
