@@ -1067,12 +1067,15 @@ export const resolveShareLink = createServerFn({ method: "GET" })
       )[0];
     }
     if (!row) {
+      // qrCodeOwner already prefers the owner's live phone_book name.
       const qr = await qrCodeOwner(sql, code);
       if (!qr) return null;
-      row = { from_name: qr.name, to_phone: null, from_phone: qr.phone };
+      const fromPhoto = await findPhoto(sql, qr.phone, qr.name);
+      return { fromName: qr.name, toPhone: null, code, fromPhoto };
     }
     const fromPhoto = await findPhoto(sql, row.from_phone ?? null, row.from_name);
-    return { fromName: row.from_name, toPhone: row.to_phone, code, fromPhoto };
+    const fromName = (await liveName(sql, row.from_phone)) ?? row.from_name;
+    return { fromName, toPhone: row.to_phone, code, fromPhoto };
   });
 
 /** Personal QR links (/k/<code>) live in qr_codes, not share_links. */
@@ -1082,7 +1085,33 @@ async function qrCodeOwner(sql: Sql, code: string): Promise<{ phone: string; nam
   `.catch(() => []);
   const r = rows[0];
   if (!r) return null;
-  return { phone: r.phone, name: r.display_name?.trim() || "Someone" };
+  // qr_codes.display_name is frozen at creation; prefer the owner's current name.
+  const live = await liveName(sql, r.phone);
+  return { phone: r.phone, name: live ?? (r.display_name?.trim() || "Someone") };
+}
+
+/**
+ * The owner's current phone_book name, or null. An exact phone wins; a fuzzy
+ * phone_match (e.g. a short QA identity) is used only when it is unambiguous.
+ */
+async function liveName(sql: Sql, phone: string | null | undefined): Promise<string | null> {
+  const p = normalizePhone(phone ?? "");
+  if (p.length < MIN_PHONE_DIGITS) return null;
+  try {
+    const rows = await sql<{ phone: string; display_name: string }>`
+      select phone, display_name from phone_book
+      where phone_match(phone, ${p})
+        and btrim(display_name) <> ''
+        and lower(btrim(display_name)) not in ('you', 'someone')
+      order by (phone = ${p}) desc, last_seen desc nulls last
+      limit 2
+    `;
+    const exact = rows.find((r) => r.phone === p);
+    const pick = exact ?? (rows.length === 1 ? rows[0] : undefined);
+    return pick ? pick.display_name.trim().slice(0, 32) : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -1141,7 +1170,8 @@ export async function loadShareCardSource(raw: string): Promise<ShareCardSource 
     if (row) {
       const card = stored ?? (row.card?.startsWith("data:image") ? row.card : null);
       const photo = card ? null : await findPhoto(sql, row.from_phone ?? null, row.from_name ?? null);
-      return { code, card, photo, name: row.from_name || "Someone", persist: true };
+      const name = (await liveName(sql, row.from_phone)) ?? (row.from_name || "Someone");
+      return { code, card, photo, name, persist: true };
     }
   } catch {
     /* fall through to QR codes */
