@@ -9,7 +9,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   acceptsHtml,
-  createHeadInjector,
   injectGrokPwaHead,
   isDocumentPath,
   isInstallQuery,
@@ -17,6 +16,7 @@ import {
   renderWebManifest,
   snapshotOgIdentity,
 } from "./grok-pwa-shared.mjs";
+import { createShareAwareHeadInjector } from "../server/lib/share-aware-head.mjs";
 
 export const GROK_OG_IDENTITY_ID = "virtual:grok-og-identity";
 
@@ -102,7 +102,7 @@ function wrapHtmlResponses(middlewares, cwd) {
     const originalWrite = res.write.bind(res);
     const originalEnd = res.end.bind(res);
     const host = requestHost(req);
-    const injector = createHeadInjector({
+    const injector = createShareAwareHeadInjector({
       host,
       cwd,
     });

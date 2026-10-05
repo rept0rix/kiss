@@ -1,3 +1,4 @@
+import { jpegWithin, PHOTO_MAX_CHARS, PHOTO_PX } from "./jpeg";
 import { normalizePhone } from "./phone";
 
 export type PhoneContact = {
@@ -65,7 +66,8 @@ export function tinyPhoto(blob: Blob): Promise<string | null> {
   return blobToThumb(blob, 96, 0.72);
 }
 
-export function shrinkDataUrl(src: string, size = 160): Promise<string> {
+/** Square-crop to at most `size` px (never upscales) within the profile photo budget. */
+export function shrinkDataUrl(src: string, size = PHOTO_PX): Promise<string> {
   return new Promise((resolve) => {
     if (!src.startsWith("data:image")) {
       resolve(src);
@@ -73,19 +75,20 @@ export function shrinkDataUrl(src: string, size = 160): Promise<string> {
     }
     const img = new Image();
     img.onload = () => {
+      const s = Math.min(img.width, img.height);
+      const edge = Math.min(size, s);
       const canvas = document.createElement("canvas");
-      canvas.width = size;
-      canvas.height = size;
+      canvas.width = edge;
+      canvas.height = edge;
       const ctx = canvas.getContext("2d");
       if (!ctx) {
         resolve(src);
         return;
       }
-      const s = Math.min(img.width, img.height);
       const sx = (img.width - s) / 2;
       const sy = (img.height - s) / 2;
-      ctx.drawImage(img, sx, sy, s, s, 0, 0, size, size);
-      resolve(canvas.toDataURL("image/jpeg", 0.62));
+      ctx.drawImage(img, sx, sy, s, s, 0, 0, edge, edge);
+      resolve(jpegWithin(canvas, PHOTO_MAX_CHARS));
     };
     img.onerror = () => resolve(src);
     img.src = src;
