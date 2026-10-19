@@ -64,3 +64,25 @@ export async function copyKiss(text: string): Promise<boolean> {
     }
   }
 }
+
+export async function nativeShareOrCopy(opts: {
+  title?: string;
+  text?: string;
+  url?: string;
+}): Promise<"shared" | "copied" | "failed"> {
+  const { title = "KISS", text = "Come get a kiss from me 💋", url } = opts;
+  if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+    try {
+      await navigator.share({ title, text, url: url || undefined });
+      return "shared";
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return "failed";
+      }
+    }
+  }
+  const full = url ? (text ? `${text}\n${url}` : url) : text;
+  const ok = await copyKiss(full);
+  return ok ? "copied" : "failed";
+}
+

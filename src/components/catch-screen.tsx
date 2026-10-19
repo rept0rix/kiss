@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
+import { MessageCircle, Share2 } from "lucide-react";
+import { toast } from "sonner";
 import { Face } from "./face";
 import { ConfettiBurst } from "./confetti-burst";
 import { KissSky } from "./kiss-sky";
 import { LipsMark } from "./lips-mark";
 import { playKiss, unlockSound } from "@/lib/sound";
 import { loadMe } from "@/lib/me";
-import { loadRecents } from "@/lib/contacts";
+import { loadRecents, openWhatsApp } from "@/lib/contacts";
 import { searchDirectory, sendPhoneKiss } from "@/lib/kisses/server";
+import { nativeShareOrCopy, publicCatchUrl } from "@/lib/share";
 import type { PublicPerson } from "@/lib/kisses/types";
 
 export function CatchScreen({
@@ -140,6 +143,39 @@ export function CatchScreen({
             {caught ? "GOT IT" : "COME GET IT"}
           </button>
         )}
+
+        <div className="flex gap-2 mt-4 justify-center">
+          <button
+            type="button"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#25d366]/20 text-[#25d366] text-xs font-semibold hover:bg-[#25d366]/30 transition-colors"
+            onClick={() => {
+              const me = loadMe();
+              const url = publicCatchUrl(me.name || "Someone", me.phone);
+              openWhatsApp("", `I caught a kiss from ${who} on KISS! 💋 Get yours here:\n${url || window.location.origin}`);
+            }}
+          >
+            <MessageCircle size={14} />
+            <span>WhatsApp</span>
+          </button>
+          <button
+            type="button"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/15 text-white text-xs font-semibold hover:bg-white/20 transition-colors"
+            onClick={async () => {
+              const me = loadMe();
+              const url = publicCatchUrl(me.name || "Someone", me.phone);
+              const res = await nativeShareOrCopy({
+                title: "KISS",
+                text: `I caught a kiss from ${who} on KISS! 💋`,
+                url: url || window.location.origin,
+              });
+              if (res === "copied") toast.success("קישור הועתק!");
+              else if (res === "shared") toast.success("שותף בהצלחה!");
+            }}
+          >
+            <Share2 size={14} />
+            <span>Share</span>
+          </button>
+        </div>
       </div>
     </KissSky>
   );

@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
+import { MessageCircle, Smartphone, Share2 } from "lucide-react";
+import { toast } from "sonner";
 import { isBlocked } from "@/lib/block";
-import { formatPhone } from "@/lib/contacts";
+import { formatPhone, openWhatsApp, smsHref } from "@/lib/contacts";
 import { displayName, getNick, setNick } from "@/lib/nicks";
 import { saveNick } from "@/lib/kisses/server";
+import { nativeShareOrCopy, publicCatchUrl } from "@/lib/share";
 import type { OrbitItem } from "@/lib/kisses/types";
 import { Face } from "./face";
 import { Confirm } from "./confirm";
@@ -103,6 +106,53 @@ export function PersonSheet({
         >
           {busy ? "…" : sentNow > 0 ? `Kiss · ${sentNow}` : "Kiss"}
         </button>
+
+        {/* Quick External Actions: WhatsApp, SMS, Share */}
+        <div className="flex gap-2 w-full mt-2 justify-center">
+          {tel ? (
+            <>
+              <button
+                type="button"
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-[#25d366]/15 hover:bg-[#25d366]/25 text-[#25d366] font-medium text-xs transition-colors"
+                onClick={() => {
+                  const url = publicCatchUrl(myName || "Someone", tel);
+                  const msg = `Come get a kiss from me on KISS 💋${url ? `\n${url}` : ""}`;
+                  openWhatsApp(tel, msg);
+                }}
+                title="Send on WhatsApp"
+              >
+                <MessageCircle size={15} />
+                <span>WhatsApp</span>
+              </button>
+              <a
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-medium text-xs transition-colors"
+                href={smsHref(tel, `Come get a kiss from me on KISS 💋\n${publicCatchUrl(myName || "Someone", tel) || ""}`)}
+                title="Send SMS"
+              >
+                <Smartphone size={15} />
+                <span>SMS</span>
+              </a>
+            </>
+          ) : null}
+          <button
+            type="button"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-white font-medium text-xs transition-colors"
+            onClick={async () => {
+              const url = publicCatchUrl(myName || "Someone", tel);
+              const res = await nativeShareOrCopy({
+                title: "KISS",
+                text: `Come get a kiss from ${myName || "Someone"} on KISS 💋`,
+                url: url || window.location.origin,
+              });
+              if (res === "copied") toast.success("קישור הועתק!");
+              else if (res === "shared") toast.success("שותף בהצלחה!");
+            }}
+            title="Share kiss link"
+          >
+            <Share2 size={15} />
+            <span>Share</span>
+          </button>
+        </div>
       </div>
       <Confirm
         open={askBlock}

@@ -15,10 +15,12 @@ import { SendSheet, type SendTarget } from "@/components/send-sheet";
 import { SoundSettings } from "@/components/sound-settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PhoneGate } from "@/components/phone-gate";
 import { invalidateHome, invalidatePhoneInbox, useHome, usePhoneHome, usePhoneInbox, usePhoneStats } from "@/hooks/use-home";
 import { useKeyboardInset } from "@/hooks/use-keyboard";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { blockPhone, catchKiss, catchPhoneKiss, lookupFace, registerPhone, searchDirectory, sendKiss, sendPhoneKiss, setDisplayName, setPhone, unblockPhone } from "@/lib/kisses/server";
+import { blockPhone, catchKiss, catchPhoneKiss, lookupFace, pingPresence, registerPhone, searchDirectory, sendKiss, sendPhoneKiss, setDisplayName, setPhone, unblockPhone } from "@/lib/kisses/server";
+import { nativeShareOrCopy, publicCatchUrl } from "@/lib/share";
 import { isLive } from "@/lib/kisses/online";
 import { nextRank, rankAt } from "@/lib/kisses/ranks";
 import type { HomePayload, OrbitItem } from "@/lib/kisses/types";
@@ -288,17 +290,21 @@ function Home() {
       kissIds: list.map((k) => k.id),
     }));
     celebrate(1);
-    notifyKiss(next[0]?.from ?? "Someone");
+    void notifyKiss(next[0]?.from ?? "Someone", list.length);
     askNotify();
     openSuperWindow();
     enqueue(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [home.data?.inbox]);
 
-  // Presence only — never push local photo here (that would overwrite Neon on boot).
+  // Presence heartbeat every 30 seconds so user stays online continuously
   useEffect(() => {
     if (!isValidPhone(me.phone)) return;
     void registerPhone({ data: { phone: me.phone, name: me.name, photo: null } }).catch(() => undefined);
+    const interval = window.setInterval(() => {
+      void pingPresence({ data: { phone: me.phone, name: me.name } }).catch(() => undefined);
+    }, 30000);
+    return () => window.clearInterval(interval);
   }, [me.phone, me.name]);
 
   useEffect(() => {
@@ -336,7 +342,7 @@ function Home() {
       phoneKissIds: list.map((k) => k.id),
     }));
     celebrate(1);
-    notifyKiss(next[0]?.from ?? "Someone");
+    void notifyKiss(next[0]?.from ?? "Someone", list.length);
     askNotify();
     openSuperWindow();
     enqueue(next);
@@ -472,6 +478,7 @@ function Home() {
           <PhoneGate
             draftPhone={draftPhone || me.phone || search.p || ""}
             onDraftPhone={setDraftPhone}
+            onCancel={() => setGate(false)}
             onReady={(phone) => {
               setGate(false);
               setFinding(true);
@@ -662,12 +669,17 @@ function Home() {
             if (liveUser) void setDisplayName({ data: name });
           }}
         />
-        <p className="phone-line">
+        <button
+          type="button"
+          onClick={() => setGate(true)}
+          className="phone-line cursor-pointer hover:opacity-80 transition-opacity"
+          title="לחץ לשינוי מספר"
+        >
           {formatPhone(me.phone).display}
           {formatPhone(me.phone).country ? (
             <span className="phone-cc"> {formatPhone(me.phone).country}</span>
           ) : null}
-        </p>
+        </button>
 
         <p className="counts">
           <span className="tabular-nums text-fg">{sent}</span> sent
@@ -849,12 +861,65 @@ function Home() {
         open={moreOpen}
         onClose={() => setMoreOpen(false)}
         onProfile={() => setProfileOpen(true)}
+        onPhone={() => {
+          setMoreOpen(false);
+          setGate(true);
+        }}
         onScan={() => setQrScanOpen(true)}
         onImport={() => setContactImportOpen(true)}
         onSkins={() => setSkinsOpen(true)}
         onSuper={() => setSuperStoreOpen(true)}
         onSettings={() => setSettings(true)}
+        onShare={async () => {
+          setMoreOpen(false);
+          const url = publicCatchUrl(displayName, me.phone);
+          const res = await nativeShareOrCopy({
+            title: "KISS",
+            text: `Come get a kiss from ${displayName} on KISS! 💋`,
+            url: url || window.location.origin,
+          });
+          if (res === "copied") toast.success("קישור הועתק!");
+          else if (res === "shared") toast.success("שותף בהצלחה!");
+        }}
       />
+      {gate ? (
+        <PhoneGate
+          draftPhone={draftPhone || me.phone || search.p || ""}
+          onDraftPhone={setDraftPhone}
+          onCancel={() => setGate(false)}
+          onReady={(phone) => {
+            setGate(false);
+            setFinding(true);
+            patch({ entered: true, phone });
+            void lookupFace({ data: { phone } })
+              .then((hit) => {
+                setMe((prev) => {
+                  const next = {
+                    ...prev,
+                    entered: true,
+                    phone,
+                    name: hit.name || prev.name,
+                    photo: hit.photo || prev.photo,
+                  };
+                  saveMe(next);
+                  return next;
+                });
+                if (hit.photo) rememberPhoto(hit.photo);
+              })
+              .catch(() => {
+                setMe((prev) => {
+                  const next = { ...prev, entered: true, phone };
+                  saveMe(next);
+                  return next;
+                });
+              })
+              .finally(() => setFinding(false));
+            if (liveUser) {
+              void registerPhone({ data: { phone } }).catch(() => undefined);
+            }
+          }}
+        />
+      ) : null}
       <QrScanner
         open={qrScanOpen}
         onClose={() => setQrScanOpen(false)}
@@ -1339,42 +1404,3 @@ function NameGate({
   );
 }
 
-function PhoneGate({
-  draftPhone,
-  onDraftPhone,
-  onReady,
-}: {
-  draftPhone: string;
-  onDraftPhone: (v: string) => void;
-  onReady: (phone: string) => void;
-}) {
-  const digits = phoneDigits(draftPhone);
-  const phoneReady = isValidPhone(draftPhone);
-  useKeyboardInset(true);
-  return (
-    <div className="sheet-scrim">
-      <div className="sheet" role="dialog" aria-label="Your phone">
-        <p className="font-display text-2xl">Your number</p>
-        <p className="mt-1 text-sm text-muted">Confirm the phone people already have.</p>
-        <Input
-          className="mt-4"
-          value={draftPhone}
-          onChange={(e) => onDraftPhone(e.target.value)}
-          placeholder="Phone number"
-          type="tel"
-          name="phone"
-          inputMode="tel"
-          autoComplete="tel"
-        />
-        <Button
-          size="lg"
-          className="mt-4 w-full"
-          disabled={!phoneReady}
-          onClick={() => onReady(digits)}
-        >
-          Confirm
-        </Button>
-      </div>
-    </div>
-  );
-}

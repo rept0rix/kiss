@@ -17,13 +17,95 @@ type ContactPickerNav = Navigator & {
 
 const RECENTS_KEY = "kiss-contacts-v1";
 
+export interface KissContactsPluginType {
+  pickContact(): Promise<{ name: string; tel: string; photo?: string | null }>;
+  getContacts(): Promise<{ contacts: Array<{ name: string; tel: string; photo?: string | null }> }>;
+}
+
+export function isNativeApp(): boolean {
+  if (typeof window === "undefined") return false;
+  const win = window as Window & { Capacitor?: { isNativePlatform?: () => boolean } };
+  return Boolean(win.Capacitor?.isNativePlatform?.());
+}
+
+async function capgoPick(): Promise<PhoneContact[] | null> {
+  try {
+    const { Capacitor } = await import("@capacitor/core");
+    if (!Capacitor.isNativePlatform()) return null;
+    const { CapacitorContacts } = await import("@capgo/capacitor-contacts");
+    const result = await CapacitorContacts.pickContacts({
+      multiple: false,
+    });
+    if (!result?.contacts?.length) return [];
+    const out: PhoneContact[] = [];
+    for (const c of result.contacts) {
+      const name = (c.fullName || `${c.givenName ?? ""} ${c.familyName ?? ""}`.trim() || "Someone").trim() || "Someone";
+      const tel = (c.phoneNumbers?.[0]?.value || "").trim();
+      const photo = c.photo ? (c.photo.startsWith("data:") ? c.photo : `data:image/jpeg;base64,${c.photo}`) : null;
+      if (tel) {
+        const picked = { name, tel, photo };
+        rememberContact(picked);
+        out.push(picked);
+      }
+    }
+    return out;
+  } catch (e) {
+    console.warn("CapacitorContacts.pickContacts dismissed or failed:", e);
+    return null;
+  }
+}
+
+async function capgoGetAll(): Promise<PhoneContact[] | null> {
+  try {
+    const { Capacitor } = await import("@capacitor/core");
+    if (!Capacitor.isNativePlatform()) return null;
+    const { CapacitorContacts } = await import("@capgo/capacitor-contacts");
+    const perm = await CapacitorContacts.checkPermissions();
+    if (perm.readContacts !== "granted") {
+      const req = await CapacitorContacts.requestPermissions();
+      if (req.readContacts !== "granted" && req.readContacts !== "limited") {
+        return null;
+      }
+    }
+    const result = await CapacitorContacts.getContacts();
+    if (!result?.contacts?.length) return [];
+    const out: PhoneContact[] = [];
+    for (const c of result.contacts) {
+      const name = (c.fullName || `${c.givenName ?? ""} ${c.familyName ?? ""}`.trim() || "Someone").trim() || "Someone";
+      const tel = (c.phoneNumbers?.[0]?.value || "").trim();
+      const photo = c.photo ? (c.photo.startsWith("data:") ? c.photo : `data:image/jpeg;base64,${c.photo}`) : null;
+      if (tel) {
+        const contact = { name, tel, photo };
+        rememberContact(contact);
+        out.push(contact);
+      }
+    }
+    return out;
+  } catch (e) {
+    console.warn("CapacitorContacts.getContacts failed:", e);
+    return null;
+  }
+}
+
+async function getKissContactsPlugin(): Promise<KissContactsPluginType | null> {
+  if (!isNativeApp()) return null;
+  try {
+    const { registerPlugin } = await import("@capacitor/core");
+    return registerPlugin<KissContactsPluginType>("KissContacts");
+  } catch {
+    return null;
+  }
+}
+
 export function canPickContacts(): boolean {
   if (typeof window === "undefined") return false;
+  if (isNativeApp()) return true;
   const nav = navigator as ContactPickerNav;
   return typeof nav.contacts?.select === "function";
 }
 
-export async function pickFromPhone(): Promise<PhoneContact[]> {
+async function webPick(): Promise<PhoneContact[]> {
+  if (typeof navigator === "undefined") return [];
   const nav = navigator as ContactPickerNav;
   if (!nav.contacts?.select) return [];
   let rows: Array<{ name?: string[]; tel?: string[]; icon?: Blob[] }> = [];
@@ -46,6 +128,68 @@ export async function pickFromPhone(): Promise<PhoneContact[]> {
     out.push(picked);
   }
   return out;
+}
+
+export async function pickFromPhone(): Promise<PhoneContact[]> {
+  // 1. Try Capgo native picker
+  const capgo = await capgoPick();
+  if (capgo !== null && capgo.length > 0) return capgo;
+
+  // 2. Try custom KissContacts plugin if present
+  const plugin = await getKissContactsPlugin();
+  if (plugin) {
+    try {
+      const res = await plugin.pickContact();
+      if (res && res.tel) {
+        const picked: PhoneContact = {
+          name: res.name || "Someone",
+          tel: res.tel,
+          photo: res.photo || null,
+        };
+        rememberContact(picked);
+        return [picked];
+      }
+    } catch (err) {
+      console.warn("KissContacts.pickContact error or dismissed:", err);
+    }
+  }
+
+  // 3. Web contact picker fallback
+  return webPick();
+}
+
+export async function fetchAllPhoneContacts(): Promise<PhoneContact[]> {
+  // 1. Try Capgo get contacts
+  const capgo = await capgoGetAll();
+  if (capgo !== null && capgo.length > 0) return capgo;
+
+  // 2. Try custom KissContacts plugin if present
+  const plugin = await getKissContactsPlugin();
+  if (plugin) {
+    try {
+      const res = await plugin.getContacts();
+      if (res?.contacts && res.contacts.length > 0) {
+        const out: PhoneContact[] = [];
+        for (const c of res.contacts) {
+          if (c.tel) {
+            const contact: PhoneContact = {
+              name: c.name || "Someone",
+              tel: c.tel,
+              photo: c.photo || null,
+            };
+            rememberContact(contact);
+            out.push(contact);
+          }
+        }
+        if (out.length > 0) return out;
+      }
+    } catch (err) {
+      console.warn("KissContacts.getContacts error:", err);
+    }
+  }
+
+  // 3. Fall back to picker
+  return pickFromPhone();
 }
 
 export function nameHue(name: string): number {

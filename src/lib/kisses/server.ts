@@ -1198,9 +1198,8 @@ export const searchDirectory = createServerFn({ method: "POST" })
       }
       if (!name && !phone) continue;
       seen.add(key);
-      const wantPhoto = qName.length >= 2 || lookingPhone;
       const photo =
-        wantPhoto && typeof r.photo === "string" && r.photo.startsWith("data:") ? r.photo : null;
+        typeof r.photo === "string" && (r.photo.startsWith("data:") || r.photo.startsWith("http")) ? r.photo : null;
       const uid = typeof r.user_id === "string" ? r.user_id : `p:${phone || name}`;
       out.push({
         userId: uid,
@@ -1280,6 +1279,7 @@ export const phoneInbox = createServerFn({ method: "POST" })
     const phone = normalizePhone(raw);
     if (phone.length < MIN_PHONE_DIGITS) return [];
     const sql = await getSql();
+    void sql`update phone_book set last_seen = now() where phone_match(phone, ${phone})`.catch(() => undefined);
     const rows = await sql<{
       id: number;
       from_phone: string;
@@ -1321,6 +1321,35 @@ export const phoneInbox = createServerFn({ method: "POST" })
       blocked = [];
     }
     return mapped.filter((r) => !blocked.some((b) => phonesMatch(b.blocked_phone, r.fromPhone)));
+  });
+
+export const pingPresence = createServerFn({ method: "POST" })
+  .validator((data: { phone: string; name?: string }) => data)
+  .handler(async ({ data }) => {
+    const phone = normalizePhone(data.phone);
+    if (phone.length < MIN_PHONE_DIGITS) return { ok: false };
+    const sql = await getSql();
+    await sql`
+      update phone_book set last_seen = now() where phone_match(phone, ${phone})
+    `.catch(() => undefined);
+    return { ok: true };
+  });
+
+export const updateProfilePhoto = createServerFn({ method: "POST" })
+  .validator((data: { phone: string; photo: string | null; name?: string }) => data)
+  .handler(async ({ data }) => {
+    const phone = normalizePhone(data.phone);
+    if (phone.length < MIN_PHONE_DIGITS) return { ok: false };
+    const sql = await getSql();
+    const photo = data.photo && (data.photo.startsWith("data:") || data.photo.startsWith("http")) ? data.photo.slice(0, 150000) : null;
+    await sql`
+      insert into phone_book (phone, display_name, photo, last_seen)
+      values (${phone}, ${data.name || ""}, ${photo}, now())
+      on conflict (phone) do update set
+        photo = excluded.photo,
+        last_seen = now()
+    `.catch(() => undefined);
+    return { ok: true };
   });
 
 /** Home counters for a phone identity — what a signed-out user restores after a wipe. */

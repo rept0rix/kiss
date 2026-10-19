@@ -130,18 +130,27 @@ async function createPgliteSql(): Promise<Sql> {
   // data survives source edits (it resets on dev-server restart).
   globalRef.__pgliteInstance__ ??= (async () => {
     const { PGlite } = await import("@electric-sql/pglite");
-    const pg = new PGlite({
-      parsers: {
-        [OID_INT8]: Number,
-        [OID_DATE]: identity,
-        [OID_INTERVAL]: identity,
-      },
-    });
+    const dataDir = process.env.PGLITE_DATA_DIR;
+    const pg = dataDir
+      ? new PGlite(dataDir, {
+          parsers: {
+            [OID_INT8]: Number,
+            [OID_DATE]: identity,
+            [OID_INTERVAL]: identity,
+          },
+        })
+      : new PGlite({
+          parsers: {
+            [OID_INT8]: Number,
+            [OID_DATE]: identity,
+            [OID_INTERVAL]: identity,
+          },
+        });
     await pg.waitReady;
     await pg.exec(
       "create table if not exists _migrations (name text primary key, applied_at timestamptz not null default now())",
     );
-    console.log("[db] backend: pglite (in-memory, resets on restart)");
+    console.log(`[db] backend: pglite (${dataDir ? "persisted at " + dataDir : "in-memory, resets on restart"})`);
     return pg;
   })().catch((err) => {
     globalRef.__pgliteInstance__ = undefined;

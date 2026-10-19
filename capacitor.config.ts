@@ -4,7 +4,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 /// After `npm run build`, run `npx cap sync` to copy the web build
 /// into the native iOS/Android projects.
 const config: CapacitorConfig = {
-  appId: "com.kiss.app",
+  appId: "online.sendkiss.app",
   appName: "KISS",
   webDir: "dist",
   server: {
@@ -16,7 +16,10 @@ const config: CapacitorConfig = {
       backgroundColor: "#070707",
       androidScaleType: "CENTER_CROP",
     },
+    CapacitorCookies: { enabled: true },
+    CapacitorHttp: { enabled: true },
   },
 };
 
 export default config;
+

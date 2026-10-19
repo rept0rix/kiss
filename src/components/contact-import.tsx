@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { canPickContacts, pickFromPhone, type PhoneContact } from "@/lib/contacts";
+import { canPickContacts, fetchAllPhoneContacts, pickFromPhone, type PhoneContact } from "@/lib/contacts";
 import { searchDirectory, sendPhoneKiss } from "@/lib/kisses/server";
 import { rankAt } from "@/lib/kisses/ranks";
 import { Button } from "./ui/button";
@@ -64,7 +64,7 @@ export function ContactImport({
     setBusy(true);
     setMessage(null);
     try {
-      const picked = given ?? (await pickFromPhone());
+      const picked = given ?? (await fetchAllPhoneContacts());
       if (picked.length === 0) {
         setMessage("No contacts picked or contacts not available");
         return;

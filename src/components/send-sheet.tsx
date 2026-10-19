@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { MessageCircle, Send, Share2, Smartphone, Users } from "lucide-react";
+import { toast } from "sonner";
 import { useKeyboardInset } from "@/hooks/use-keyboard";
 import {
   canPickContacts,
@@ -11,15 +13,16 @@ import {
   smsHref,
 } from "@/lib/contacts";
 import { loadGroups, upsertGroup, type KissGroup } from "@/lib/groups";
-import { rankAt } from "@/lib/kisses/ranks";
+import { RANKS, rankAt } from "@/lib/kisses/ranks";
 import { createShareLink, searchDirectory, sendPhoneKiss } from "@/lib/kisses/server";
 import { consumeSuperKiss } from "@/lib/store/server";
 import type { PublicPerson } from "@/lib/kisses/types";
 import { buildKissCard } from "@/lib/kiss-card";
-import { shareBody, shortCatchUrl } from "@/lib/share";
+import { nativeShareOrCopy, shareBody, shortCatchUrl } from "@/lib/share";
 import { Button } from "./ui/button";
 import { Face } from "./face";
 import { Input } from "./ui/input";
+import { KissSkin } from "./kiss-skin";
 
 export type SentPayload = {
   name: string;
@@ -94,7 +97,10 @@ export function SendSheet({
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [groups, setGroups] = useState<KissGroup[]>(() => loadGroups());
   const [inviteText, setInviteText] = useState("");
+  const [inviteUrl, setInviteUrl] = useState("");
   const [isSuper, setIsSuper] = useState(false);
+  const [selectedSkin, setSelectedSkin] = useState<string>(() => rankAt(mySent).skin);
+  const [kissCount, setKissCount] = useState<number>(1);
   const picker = canPickContacts();
   useKeyboardInset(open);
 
@@ -166,7 +172,10 @@ export function SendSheet({
           data: { fromName: myName, toPhone: tel, fromPhone: myPhone, card },
         });
         const url = shortCatchUrl(code) ?? `${window.location.origin}/k/${code}`;
-        if (!gone) setInviteText(shareBody(myName, query, url));
+        if (!gone) {
+          setInviteUrl(url);
+          setInviteText(shareBody(myName, query, url));
+        }
       } catch {
         if (!gone) setInviteText(shareBody(myName, query));
       }
@@ -191,9 +200,8 @@ export function SendSheet({
     seenHits.add(key);
     return true;
   }).map((p) => (p.photo && myPhoto && p.photo === myPhoto ? { ...p, photo: null } : p));
-  const onApp = shown.length > 0;
 
-  function finishInApp(toName: string, userId?: string, count = 1, phone?: string) {
+  function finishInApp(toName: string, userId?: string, count = kissCount, phone?: string) {
     rememberContact({ name: toName, tel: phone || tel });
     onSent({ name: toName, status: "waiting", tel: phone || tel, userId, count });
     onClose();
@@ -202,12 +210,13 @@ export function SendSheet({
   /** Send to each number in turn; returns how many kisses Neon actually saved. */
   async function kissMany(phones: string[]): Promise<number> {
     let saved = 0;
+    const kind = isSuper ? "super" : selectedSkin || rankAt(mySent).skin;
     for (const toPhone of phones) {
       try {
         await sendPhoneKiss({
-          data: { fromPhone: myPhone, fromName: myName, toPhone, count: 1, kind: isSuper ? "super" : rankAt(mySent).skin },
+          data: { fromPhone: myPhone, fromName: myName, toPhone, count: kissCount, kind },
         });
-        saved += 1;
+        saved += kissCount;
       } catch {
         /* not on KISS — skip, but do not count it */
       }
@@ -215,7 +224,7 @@ export function SendSheet({
     return saved;
   }
 
-  function kissPerson(person: PublicPerson, count = 1) {
+  function kissPerson(person: PublicPerson, count = kissCount) {
     const toPhone = person.phone || tel;
     if (!isPhoneIdentity(myPhone)) {
       setError("Add your phone first");
@@ -226,7 +235,7 @@ export function SendSheet({
       return;
     }
     setBusy(true);
-    const kind = isSuper ? "super" : rankAt(mySent).skin;
+    const kind = isSuper ? "super" : selectedSkin || rankAt(mySent).skin;
     void sendPhoneKiss({
       data: {
         fromPhone: myPhone,
@@ -242,6 +251,34 @@ export function SendSheet({
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : "Missed"))
       .finally(() => setBusy(false));
+  }
+
+  function handleWhatsApp(customPhone?: string) {
+    const destination = customPhone || tel;
+    markInvited();
+    openWhatsApp(destination, inviteText || shareBody(myName, query, inviteUrl));
+  }
+
+  function handleSms(customPhone?: string) {
+    const destination = customPhone || tel;
+    markInvited();
+    const text = inviteText || shareBody(myName, query, inviteUrl);
+    window.location.href = smsHref(destination, text);
+  }
+
+  async function handleShare() {
+    markInvited();
+    const text = inviteText || shareBody(myName, query, inviteUrl);
+    const result = await nativeShareOrCopy({
+      title: "KISS",
+      text,
+      url: inviteUrl || window.location.origin,
+    });
+    if (result === "copied") {
+      toast.success("קישור לנשיקה הועתק!");
+    } else if (result === "shared") {
+      toast.success("שותף בהצלחה!");
+    }
   }
 
   async function onPick() {
@@ -284,12 +321,53 @@ export function SendSheet({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="sheet-head">
-          <p className="font-display text-xl">Send</p>
+          <p className="font-display text-xl">Send a Kiss</p>
           <button type="button" className="sheet-x" onClick={onClose} aria-label="Close">
             Close
           </button>
         </div>
 
+        {/* Quick Native Actions: Contacts, WhatsApp, SMS, Share */}
+        <div className="quick-actions-bar">
+          <button
+            type="button"
+            className="quick-action-btn"
+            onClick={() => void onPick()}
+            title="בחר מאנשי הקשר"
+          >
+            <Users size={16} />
+            <span>אנשי קשר</span>
+          </button>
+          <button
+            type="button"
+            className="quick-action-btn is-wa"
+            onClick={() => handleWhatsApp()}
+            title="שלח ישירות בוואטסאפ"
+          >
+            <MessageCircle size={16} />
+            <span>WhatsApp</span>
+          </button>
+          <button
+            type="button"
+            className="quick-action-btn is-sms"
+            onClick={() => handleSms()}
+            title="שלח ב-SMS"
+          >
+            <Smartphone size={16} />
+            <span>SMS</span>
+          </button>
+          <button
+            type="button"
+            className="quick-action-btn is-share"
+            onClick={() => void handleShare()}
+            title="שיתוף קישור / Native Share"
+          >
+            <Share2 size={16} />
+            <span>שיתוף</span>
+          </button>
+        </div>
+
+        {/* Kiss Type: Regular vs Super */}
         <div className="kiss-type">
           <button type="button" className={isSuper ? "" : "is-on"} onClick={() => setIsSuper(false)}>
             <span className="kiss-type-dot" /> Regular kiss
@@ -302,6 +380,38 @@ export function SendSheet({
           >
             <span className="kiss-type-dot" /> Super kiss {superCount > 0 ? `· ${superCount}` : ""}
           </button>
+        </div>
+
+        {/* Kiss Style / Skin Selector */}
+        {!isSuper ? (
+          <div className="kiss-skins-row">
+            {RANKS.slice(0, 8).map((r) => (
+              <button
+                key={r.skin}
+                type="button"
+                className={`kiss-skin-pill ${selectedSkin === r.skin ? "is-on" : ""}`}
+                onClick={() => setSelectedSkin(r.skin)}
+              >
+                <KissSkin skin={r.skin} className="kiss-skin-mini" />
+                <span>{r.name}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {/* Kiss Count Multipliers */}
+        <div className="kiss-count-row">
+          <span className="kiss-count-label">Shower with:</span>
+          {[1, 5, 10, 69].map((c) => (
+            <button
+              key={c}
+              type="button"
+              className={`kiss-count-chip ${kissCount === c ? "is-on" : ""}`}
+              onClick={() => setKissCount(c)}
+            >
+              ×{c}
+            </button>
+          ))}
         </div>
 
         <Input
@@ -317,6 +427,19 @@ export function SendSheet({
           autoComplete="off"
           autoCorrect="off"
         />
+
+        {hasPhone && query !== tel ? (
+          <Input
+            className="mt-2"
+            value={tel}
+            type="tel"
+            name="phone"
+            inputMode="tel"
+            autoComplete="tel"
+            onChange={(e) => setTel(e.target.value)}
+            placeholder="Recipient Phone"
+          />
+        ) : null}
 
         {groups.length > 0 ? (
           <ul className="group-row mt-2">
@@ -369,22 +492,36 @@ export function SendSheet({
                 <Face name={hit.displayName} photo={hit.photo} className="hit-face" />
                 <span className="hit-copy">
                   <span className="hit-name">{hit.displayName}</span>
-                  <span className="hit-meta">{hit.phone ? "on KISS" : "saved"}</span>
+                  <span className="hit-meta">
+                    {hit.phone ? "on KISS" : "saved"}
+                  </span>
                 </span>
-                <Button
-                  size="sm"
-                  className="rounded-lg font-display"
-                  disabled={busy}
-                  onClick={() => kissPerson(hit, 1)}
-                >
-                  {busy ? "…" : "Kiss"}
-                </Button>
+                <div className="flex items-center gap-1.5">
+                  {hit.phone ? (
+                    <button
+                      type="button"
+                      className="p-1.5 rounded-md hover:bg-white/10 text-[#25d366]"
+                      onClick={() => handleWhatsApp(hit.phone || undefined)}
+                      title="Send on WhatsApp"
+                    >
+                      <MessageCircle size={16} />
+                    </button>
+                  ) : null}
+                  <Button
+                    size="sm"
+                    className="rounded-lg font-display"
+                    disabled={busy}
+                    onClick={() => kissPerson(hit, kissCount)}
+                  >
+                    {busy ? "…" : kissCount > 1 ? `Kiss ×${kissCount}` : "Kiss"}
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>
         ) : (
           <p className="mt-2 text-xs text-muted">
-            {query.trim() ? "Not on KISS yet." : "Name or phone."}
+            {query.trim() ? "Not on KISS yet. Use WhatsApp or SMS to send them a kiss!" : "Type a name or phone number."}
           </p>
         )}
 
@@ -410,7 +547,7 @@ export function SendSheet({
                 })().finally(() => setBusy(false));
               }}
             >
-              Kiss {picked.size}
+              Kiss {picked.size} ×{kissCount}
             </Button>
             <button
               type="button"
@@ -429,63 +566,26 @@ export function SendSheet({
           </div>
         ) : null}
 
-        {!onApp ? (
-          <>
-            {picker ? (
-              <button type="button" className="invite-toggle" onClick={() => void onPick()}>
-                Contacts
-              </button>
-            ) : null}
-            {hasPhone && query !== tel ? (
-              <Input
-                className="mt-2"
-                value={tel}
-                type="tel"
-                name="phone"
-                inputMode="tel"
-                autoComplete="tel"
-                onChange={(e) => setTel(e.target.value)}
-                placeholder="Phone"
-              />
-            ) : null}
-            {!hasPhone ? (
-              <Input
-                className="mt-2"
-                value={tel}
-                type="tel"
-                name="phone"
-                inputMode="tel"
-                autoComplete="tel"
-                onChange={(e) => setTel(e.target.value)}
-                placeholder="Phone to invite"
-              />
-            ) : null}
-            <div className="sheet-actions">
-              {hasPhone ? (
-                <>
-                  <button
-                    type="button"
-                    className="send-wa"
-                    onClick={() => {
-                      markInvited();
-                      openWhatsApp(tel, inviteText);
-                    }}
-                  >
-                    WhatsApp
-                  </button>
-                  <a
-                    className="send-link"
-                    href={smsHref(tel, inviteText)}
-                    onClick={markInvited}
-                  >
-                    SMS
-                  </a>
-                </>
-              ) : (
-                <span className="send-wa is-off">WhatsApp</span>
-              )}
-            </div>
-          </>
+        {error ? <p className="mt-2 text-xs text-red-400">{error}</p> : null}
+
+        {/* Direct Send / Invite Bar for typed phone or non-app contacts */}
+        {hasPhone ? (
+          <div className="sheet-actions mt-3">
+            <button
+              type="button"
+              className="send-wa w-full"
+              onClick={() => handleWhatsApp(tel)}
+            >
+              Send via WhatsApp
+            </button>
+            <a
+              className="send-link mt-2 w-full"
+              href={smsHref(tel, inviteText || shareBody(myName, query, inviteUrl))}
+              onClick={() => markInvited()}
+            >
+              Send via SMS
+            </a>
+          </div>
         ) : null}
       </div>
     </div>
