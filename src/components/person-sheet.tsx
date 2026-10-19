@@ -144,8 +144,8 @@ export function PersonSheet({
                 text: `Come get a kiss from ${myName || "Someone"} on KISS 💋`,
                 url: url || window.location.origin,
               });
-              if (res === "copied") toast.success("קישור הועתק!");
-              else if (res === "shared") toast.success("שותף בהצלחה!");
+              if (res === "copied") toast.success("Kiss link copied!");
+              else if (res === "shared") toast.success("Shared successfully!");
             }}
             title="Share kiss link"
           >

@@ -168,8 +168,8 @@ export function CatchScreen({
                 text: `I caught a kiss from ${who} on KISS! 💋`,
                 url: url || window.location.origin,
               });
-              if (res === "copied") toast.success("קישור הועתק!");
-              else if (res === "shared") toast.success("שותף בהצלחה!");
+              if (res === "copied") toast.success("Kiss link copied!");
+              else if (res === "shared") toast.success("Shared successfully!");
             }}
           >
             <Share2 size={14} />

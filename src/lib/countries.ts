@@ -382,7 +382,7 @@ export function validatePhoneForCountry(
       if (digits.length < 10) {
         return {
           isValid: false,
-          error: `חסרות ${10 - digits.length} ספרות (מספר נייד ישראלי כולל 10 ספרות)`,
+          error: `Missing ${10 - digits.length} digits (10 digits expected)`,
           normalizedPhone: `972${digits.slice(1)}`,
           formattedDisplay: formatIsraeliLocal(digits),
         };
@@ -390,7 +390,7 @@ export function validatePhoneForCountry(
       if (digits.length > 10) {
         return {
           isValid: false,
-          error: "יותר מדי ספרות (מספר נייד ישראלי כולל 10 ספרות)",
+          error: "Too many digits (10 digits expected)",
           normalizedPhone: `972${digits.slice(1, 10)}`,
           formattedDisplay: formatIsraeliLocal(digits.slice(0, 10)),
         };
@@ -406,7 +406,7 @@ export function validatePhoneForCountry(
       if (digits.length < 9) {
         return {
           isValid: false,
-          error: `חסרות ${9 - digits.length} ספרות (נדרשות 9 ספרות)`,
+          error: `Missing ${9 - digits.length} digits (9 digits expected)`,
           normalizedPhone: `972${digits}`,
           formattedDisplay: formatIsraeliLocal(`0${digits}`),
         };
@@ -414,7 +414,7 @@ export function validatePhoneForCountry(
       if (digits.length > 9) {
         return {
           isValid: false,
-          error: "יותר מדי ספרות (נדרשות 9 ספרות ללא 0)",
+          error: "Too many digits (9 digits expected without 0)",
           normalizedPhone: `972${digits.slice(0, 9)}`,
           formattedDisplay: formatIsraeliLocal(`0${digits.slice(0, 9)}`),
         };
@@ -431,7 +431,7 @@ export function validatePhoneForCountry(
       if (digits.length < 9) {
         return {
           isValid: false,
-          error: `חסרות ${9 - digits.length} ספרות`,
+          error: `Missing ${9 - digits.length} digits`,
           normalizedPhone: `972${digits.slice(1)}`,
           formattedDisplay: digits,
         };
@@ -445,7 +445,7 @@ export function validatePhoneForCountry(
       }
       return {
         isValid: false,
-        error: "יותר מדי ספרות",
+        error: "Too many digits",
         normalizedPhone: `972${digits.slice(1, 9)}`,
         formattedDisplay: digits,
       };
@@ -462,7 +462,7 @@ export function validatePhoneForCountry(
 
     return {
       isValid: false,
-      error: "מספר ישראלי נייד צריך להתחיל ב-05 (לדוגמה 050-1234567)",
+      error: "Mobile number should start with 05 (e.g. 050-123-4567)",
       normalizedPhone: `972${digits}`,
       formattedDisplay: digits,
     };
@@ -476,7 +476,7 @@ export function validatePhoneForCountry(
     const diff = country.minLength - cleanDigits.length;
     return {
       isValid: false,
-      error: `מספר קצר מדי (חסרות עוד ${diff} ספרות)`,
+      error: `Number too short (missing ${diff} digits)`,
       normalizedPhone: `${dialDigits}${cleanDigits}`,
       formattedDisplay: cleanDigits,
     };
@@ -485,7 +485,7 @@ export function validatePhoneForCountry(
   if (cleanDigits.length > country.maxLength) {
     return {
       isValid: false,
-      error: `מספר ארוך מדי (מקסימום ${country.maxLength} ספרות)`,
+      error: `Number too long (maximum ${country.maxLength} digits)`,
       normalizedPhone: `${dialDigits}${cleanDigits.slice(0, country.maxLength)}`,
       formattedDisplay: cleanDigits,
     };

@@ -673,7 +673,7 @@ function Home() {
           type="button"
           onClick={() => setGate(true)}
           className="phone-line cursor-pointer hover:opacity-80 transition-opacity"
-          title="לחץ לשינוי מספר"
+          title="Tap to change number"
         >
           {formatPhone(me.phone).display}
           {formatPhone(me.phone).country ? (
@@ -878,8 +878,8 @@ function Home() {
             text: `Come get a kiss from ${displayName} on KISS! 💋`,
             url: url || window.location.origin,
           });
-          if (res === "copied") toast.success("קישור הועתק!");
-          else if (res === "shared") toast.success("שותף בהצלחה!");
+          if (res === "copied") toast.success("Kiss link copied!");
+          else if (res === "shared") toast.success("Shared successfully!");
         }}
       />
       {gate ? (

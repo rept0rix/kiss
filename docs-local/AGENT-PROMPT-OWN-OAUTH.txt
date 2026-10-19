@@ -1,0 +1,51 @@
+You are working in the KISS repo (~/kiss/kiss), branch `cursor/own-oauth` (already created from origin/main). Implement "own Google/X sign-in via Better Auth socialProviders" exactly as specified below. Do NOT touch: untracked android/, ios/, docs/AGENT-PROMPT-PHOTOS*.txt, the git stash, or any other branch. Do NOT push, do NOT open PRs, do NOT change any Vercel/Neon/OAuth config. Do not `git add -A`; stage only the files you change.
+
+## Background (why)
+Production (Vercel, https://app.sendkiss.online) has none of BETTER_AUTH_URL / BETTER_AUTH_SECRET / GROK_AUTH_* set. `src/lib/auth/server.ts` therefore falls back to the shared Grok preview client `grok_preview`, a dynamic baseURL whose fallback is `http://localhost:8080`, and a random per-process secret. Result: Google/X send `redirect_uri=http://localhost:8080/api/auth/oauth2/callback/grok-google` to auth.grok.me, which rejects it ("Invalid redirect URI"). We are switching to our own Google and X OAuth apps via Better Auth `socialProviders`.
+
+## Required changes
+
+1. `src/lib/auth/server.ts`
+   - Add a "deployed" detector: `const deployed = env("VERCEL") === "1" || Boolean(env("VERCEL_ENV")) || Boolean(env("DATABASE_URL"))` (keep sandbox/local dev behavior unchanged when not deployed).
+   - baseURL: when deployed use `env("BETTER_AUTH_URL") ?? (env("VERCEL_PROJECT_PRODUCTION_URL") ? "https://" + env("VERCEL_PROJECT_PRODUCTION_URL") : undefined)`. Strip trailing slashes. When deployed NEVER use the dynamic preview baseURL or the `http://localhost:8080` fallback. When not deployed keep the existing dynamic preview/local behavior.
+   - Secret: when deployed and `BETTER_AUTH_SECRET` is missing, do NOT crash the module (phone login and the rest of the app must keep working). Instead `console.error` a loud message and mark social/broker sign-in as disabled (no social providers, no genericOAuth). Still pass Better Auth some secret so it constructs (e.g. the existing previewAuthSecret()) but since no OAuth provider is enabled nothing depends on it for sign-in. Not deployed: keep the existing previewAuthSecret() fallback.
+   - Likewise if deployed and no resolvable baseURL: log loudly and disable social + broker sign-in.
+   - socialProviders: add `google` when `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set, and `twitter` when `TWITTER_CLIENT_ID` and `TWITTER_CLIENT_SECRET` are set (and sign-in is not disabled per above). Google: `prompt: "select_account"`. Resulting callbacks are `${baseURL}/api/auth/callback/google` and `${baseURL}/api/auth/callback/twitter`.
+   - Grok broker genericOAuth plugin: only enabled when real `GROK_AUTH_CLIENT_ID` and `GROK_AUTH_CLIENT_SECRET` env vars are set. When deployed, never fall back to PREVIEW_CLIENT_ID/PREVIEW_CLIENT_SECRET. When NOT deployed (sandbox live preview on *.grok-sandbox.com / local dev), the preview client fallback may stay so the sandbox preview still works.
+   - trustedOrigins: when deployed, `[baseURL, ...LOCAL_DEV_ORIGINS]` style (keep current explicit-URL behavior); keep preview behavior otherwise.
+   - `account.accountLinking.trustedProviders`: `["google", "twitter", ...enabled broker provider ids, GATE_PROVIDER_ID]`.
+   - Keep `authConfigured` semantics sensible: true when at least one sign-in method (social or broker) is enabled and auth is not disabled. Check every importer of `authConfigured` (verify.server.ts, middleware, gates, use-current-user, etc.) so phone-only production (no OAuth env) keeps working exactly as today — do not start throwing for requests that work now. Read verify.server.ts carefully before changing semantics.
+   - Export a pure, unit-testable helper (put it in a new dependency-free module, e.g. `src/lib/auth/auth-env.ts`) that takes an env object and returns `{ deployed, baseURL, secretOk, socialProviders: ("google"|"twitter")[], brokerEnabled, signInDisabledReason? }`. server.ts should use it. This is what the test exercises.
+   - Expose to the client WHICH providers are enabled, without leaking secrets. Preferred: a tiny server function or GET endpoint (e.g. extend the existing app routes or add `src/routes/api/auth-providers.ts` if the router pattern allows; or a TanStack server fn) returning `{ providers: [{id, label, kind: "social"|"broker"}] }`. Alternatively build-time `VITE_` flags are NOT acceptable because Vercel env changes must not require code changes; a runtime endpoint is preferred. Make sure the route does not collide with Better Auth's `/api/auth/$` catch-all (use a path outside `/api/auth/`, e.g. `/api/auth-providers`).
+
+2. `src/lib/auth/providers.ts`
+   - Replace the provider list with a typed list covering social providers `{ id: "google", label: "Google", kind: "social" }`, `{ id: "twitter", label: "X", kind: "social" }` and the broker ones (`grok-google`, `grok-x`, kind "broker") kept for sandbox preview. Keep it dependency-free (imported by the client).
+
+3. `src/lib/auth/client.ts`
+   - `signIn(providerId, opts)`: for kind "social" call `authClient.signIn.social({ provider, callbackURL, errorCallbackURL })` and redirect to `data.url` if returned; for kind "broker" keep the current `signIn.oauth2` / live-preview popup path unchanged.
+   - Add a hook/helper (e.g. `useEnabledProviders()`) that fetches the runtime enabled providers list (cache it; react-query is available via src/lib/query-client.ts if convenient) and returns [] on error.
+
+4. `src/components/more-menu.tsx` (and any other place rendering sign-in buttons — grep for GROK_PROVIDERS and signIn()
+   - Render Google/X buttons only for providers the server reports enabled. If none are enabled, hide the buttons entirely (no broken buttons, no empty section header). Phone login UI must be unaffected.
+
+5. Test: add a unit test (follow the repo's existing test setup; check package.json "test" script and existing *.test.ts / *.test.mjs files and put the new test where it will actually run) for the auth-env helper asserting at least:
+   - deployed env with BETTER_AUTH_URL=https://app.sendkiss.online + secret + Google/X creds -> baseURL https://app.sendkiss.online, providers google+twitter, broker disabled, and the derived callback URLs are https://app.sendkiss.online/api/auth/callback/google and .../twitter (no "localhost" anywhere).
+   - deployed env with only VERCEL=1 + VERCEL_PROJECT_PRODUCTION_URL=app.sendkiss.online -> baseURL https://app.sendkiss.online.
+   - deployed env WITHOUT BETTER_AUTH_SECRET -> social sign-in disabled with a reason, no throw.
+   - deployed env with no GROK_AUTH_* -> brokerEnabled false (never grok_preview).
+   - deployed env with no Google/X creds -> providers [] (buttons hidden).
+   - deployed env never yields a baseURL containing localhost / 127.0.0.1.
+
+6. Docs: README.md "Auth" section and AGENTS.md: document the env vars
+   BETTER_AUTH_URL (https://app.sendkiss.online), BETTER_AUTH_SECRET (random 32+ bytes), GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, TWITTER_CLIENT_ID, TWITTER_CLIENT_SECRET, optional GROK_AUTH_ISSUER/GROK_AUTH_CLIENT_ID/GROK_AUTH_CLIENT_SECRET,
+   and the callback URLs to register: Google Cloud Console -> https://app.sendkiss.online/api/auth/callback/google (JS origin https://app.sendkiss.online); X Developer Portal (OAuth 2.0) -> https://app.sendkiss.online/api/auth/callback/twitter. Note that without these the Google/X buttons are hidden and phone login still works.
+
+## Checks (must run, fix until green or clearly explain)
+- `npx tsc --noEmit` (or `npm run typecheck` if defined)
+- `npm test` (note: README/AGENTS.md mention ~11 pre-existing failing script tests on main; confirm by comparing with `git stash`-free methods such as running the same tests against origin/main in a temp worktree ONLY if needed; do not use the existing stash). Your new test must pass. Report pre-existing failures separately.
+- `npx vite build` (or `npm run build` WITHOUT DATABASE_URL set, so no migrations run against any DB). Make sure DATABASE_URL is NOT set in your shell for the build.
+- `npx eslint` on changed files if eslint is configured.
+
+## Finish
+- Commit on `cursor/own-oauth` with message: `feat(auth): own Google/X sign-in via Better Auth socialProviders; no Grok broker/localhost fallback when deployed`. Stage only files you changed/created.
+- Do NOT push. Print a final summary: files changed, check results (pass/fail counts, pre-existing failures), commit sha, and anything you left out.

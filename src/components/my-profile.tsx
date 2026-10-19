@@ -91,8 +91,8 @@ export function MyProfile({
                 text: `Send me a kiss on KISS 💋`,
                 url: url || window.location.origin,
               });
-              if (res === "copied") toast.success("קישור לפרופיל הועתק!");
-              else if (res === "shared") toast.success("שותף בהצלחה!");
+              if (res === "copied") toast.success("Profile link copied!");
+              else if (res === "shared") toast.success("Shared successfully!");
             }}
           >
             <Share2 size={15} />

@@ -275,9 +275,9 @@ export function SendSheet({
       url: inviteUrl || window.location.origin,
     });
     if (result === "copied") {
-      toast.success("קישור לנשיקה הועתק!");
+      toast.success("Kiss link copied!");
     } else if (result === "shared") {
-      toast.success("שותף בהצלחה!");
+      toast.success("Shared successfully!");
     }
   }
 
@@ -333,16 +333,16 @@ export function SendSheet({
             type="button"
             className="quick-action-btn"
             onClick={() => void onPick()}
-            title="בחר מאנשי הקשר"
+            title="Pick from contacts"
           >
             <Users size={16} />
-            <span>אנשי קשר</span>
+            <span>Contacts</span>
           </button>
           <button
             type="button"
             className="quick-action-btn is-wa"
             onClick={() => handleWhatsApp()}
-            title="שלח ישירות בוואטסאפ"
+            title="Send via WhatsApp"
           >
             <MessageCircle size={16} />
             <span>WhatsApp</span>
@@ -351,7 +351,7 @@ export function SendSheet({
             type="button"
             className="quick-action-btn is-sms"
             onClick={() => handleSms()}
-            title="שלח ב-SMS"
+            title="Send via SMS"
           >
             <Smartphone size={16} />
             <span>SMS</span>
@@ -360,10 +360,10 @@ export function SendSheet({
             type="button"
             className="quick-action-btn is-share"
             onClick={() => void handleShare()}
-            title="שיתוף קישור / Native Share"
+            title="Share kiss link"
           >
             <Share2 size={16} />
-            <span>שיתוף</span>
+            <span>Share</span>
           </button>
         </div>
 

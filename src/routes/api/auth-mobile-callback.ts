@@ -83,9 +83,9 @@ export const Route = createFileRoute("/api/auth-mobile-callback")({
 <body>
   <div class="card">
     <div class="emoji">💋</div>
-    <h1>${token ? "ההתחברות הצליחה!" : "שגיאה בהתחברות"}</h1>
-    <p>${token ? "מעביר אותך חזרה לאפליקציית KISS..." : "לא הצלחנו לאמת את החשבון. נסה שוב מתוך האפליקציה."}</p>
-    <a id="btn" href="${deepLink}" class="btn">חזור לאפליקציה</a>
+    <h1>${token ? "Connected Successfully!" : "Sign-in Error"}</h1>
+    <p>${token ? "Redirecting back to KISS..." : "Could not authenticate account. Please try again from the app."}</p>
+    <a id="btn" href="${deepLink}" class="btn">Back to KISS</a>
   </div>
   <script>
     const target = ${JSON.stringify(deepLink)};

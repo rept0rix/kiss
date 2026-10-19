@@ -21,13 +21,13 @@ describe("validatePhoneForCountry", () => {
   it("rejects Israeli numbers with too few digits", () => {
     const res = validatePhoneForCountry(israel, "050123");
     assert.equal(res.isValid, false);
-    assert.match(res.error || "", /חסרות 4 ספרות/);
+    assert.match(res.error || "", /Missing 4 digits/);
   });
 
   it("rejects Israeli numbers with too many digits", () => {
     const res = validatePhoneForCountry(israel, "050123456789");
     assert.equal(res.isValid, false);
-    assert.match(res.error || "", /יותר מדי ספרות/);
+    assert.match(res.error || "", /Too many digits/);
   });
 
   it("validates US 10-digit number", () => {
@@ -39,6 +39,6 @@ describe("validatePhoneForCountry", () => {
   it("rejects US numbers with too few digits", () => {
     const res = validatePhoneForCountry(us, "555123");
     assert.equal(res.isValid, false);
-    assert.match(res.error || "", /מספר קצר מדי/);
+    assert.match(res.error || "", /Number too short/);
   });
 });
