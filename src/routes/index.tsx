@@ -290,7 +290,7 @@ function Home() {
       kissIds: list.map((k) => k.id),
     }));
     celebrate(1);
-    void notifyKiss(next[0]?.from ?? "Someone", list.length);
+    void notifyKiss(next[0]?.from ?? "Someone", next[0]?.count ?? 1);
     askNotify();
     openSuperWindow();
     enqueue(next);
@@ -342,7 +342,7 @@ function Home() {
       phoneKissIds: list.map((k) => k.id),
     }));
     celebrate(1);
-    void notifyKiss(next[0]?.from ?? "Someone", list.length);
+    void notifyKiss(next[0]?.from ?? "Someone", next[0]?.count ?? 1);
     askNotify();
     openSuperWindow();
     enqueue(next);
