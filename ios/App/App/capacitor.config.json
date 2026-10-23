@@ -3,7 +3,16 @@
 	"appName": "KISS",
 	"webDir": "dist",
 	"server": {
-		"androidScheme": "https"
+		"androidScheme": "https",
+		"url": "https://app.sendkiss.online",
+		"cleartext": false,
+		"allowNavigation": [
+			"app.sendkiss.online",
+			"*.sendkiss.online",
+			"192.168.*.*",
+			"10.*.*.*",
+			"localhost"
+		]
 	},
 	"plugins": {
 		"SplashScreen": {

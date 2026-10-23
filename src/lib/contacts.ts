@@ -1,3 +1,4 @@
+import { Capacitor } from "@capacitor/core";
 import { normalizePhone } from "./phone";
 
 export type PhoneContact = {
@@ -20,18 +21,76 @@ const RECENTS_KEY = "kiss-contacts-v1";
 export interface KissContactsPluginType {
   pickContact(): Promise<{ name: string; tel: string; photo?: string | null }>;
   getContacts(): Promise<{ contacts: Array<{ name: string; tel: string; photo?: string | null }> }>;
+  openSettings?(): Promise<void>;
 }
 
 export function isNativeApp(): boolean {
   if (typeof window === "undefined") return false;
-  const win = window as Window & { Capacitor?: { isNativePlatform?: () => boolean } };
-  return Boolean(win.Capacitor?.isNativePlatform?.());
+  try {
+    return Capacitor.isNativePlatform();
+  } catch {
+    const win = window as Window & { Capacitor?: { isNativePlatform?: () => boolean } };
+    return Boolean(win.Capacitor?.isNativePlatform?.());
+  }
+}
+
+export type ContactPermissionStatus = "granted" | "denied" | "prompt";
+
+export async function checkContactsPermission(): Promise<ContactPermissionStatus> {
+  if (!isNativeApp()) {
+    return "prompt";
+  }
+  try {
+    const { CapacitorContacts } = await import("@capgo/capacitor-contacts");
+    const status = await CapacitorContacts.checkPermissions();
+    if (status.readContacts === "granted" || status.readContacts === "limited") return "granted";
+    if (status.readContacts === "denied") return "denied";
+    return "prompt";
+  } catch {
+    return "prompt";
+  }
+}
+
+export async function requestContactsPermission(): Promise<boolean> {
+  if (!isNativeApp()) return false;
+  try {
+    const { CapacitorContacts } = await import("@capgo/capacitor-contacts");
+    const req = await CapacitorContacts.requestPermissions({ permissions: ["readContacts"] });
+    if (req.readContacts === "granted" || req.readContacts === "limited") return true;
+  } catch {
+    /* fallback to KissContacts */
+  }
+
+  try {
+    const plugin = await getKissContactsPlugin();
+    if (plugin?.getContacts) {
+      const res = await plugin.getContacts();
+      return Boolean(res?.contacts && res.contacts.length >= 0);
+    }
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+export async function openContactsSettings(): Promise<void> {
+  if (!isNativeApp()) return;
+  try {
+    const { CapacitorContacts } = await import("@capgo/capacitor-contacts");
+    await CapacitorContacts.openSettings();
+  } catch {
+    try {
+      const plugin = await getKissContactsPlugin();
+      if (plugin?.openSettings) await plugin.openSettings();
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 async function capgoPick(): Promise<PhoneContact[] | null> {
   try {
-    const { Capacitor } = await import("@capacitor/core");
-    if (!Capacitor.isNativePlatform()) return null;
+    if (!isNativeApp()) return null;
     const { CapacitorContacts } = await import("@capgo/capacitor-contacts");
     const result = await CapacitorContacts.pickContacts({
       multiple: false,
@@ -57,12 +116,11 @@ async function capgoPick(): Promise<PhoneContact[] | null> {
 
 async function capgoGetAll(): Promise<PhoneContact[] | null> {
   try {
-    const { Capacitor } = await import("@capacitor/core");
-    if (!Capacitor.isNativePlatform()) return null;
+    if (!isNativeApp()) return null;
     const { CapacitorContacts } = await import("@capgo/capacitor-contacts");
     const perm = await CapacitorContacts.checkPermissions();
-    if (perm.readContacts !== "granted") {
-      const req = await CapacitorContacts.requestPermissions();
+    if (perm.readContacts !== "granted" && perm.readContacts !== "limited") {
+      const req = await CapacitorContacts.requestPermissions({ permissions: ["readContacts"] });
       if (req.readContacts !== "granted" && req.readContacts !== "limited") {
         return null;
       }
@@ -131,11 +189,7 @@ async function webPick(): Promise<PhoneContact[]> {
 }
 
 export async function pickFromPhone(): Promise<PhoneContact[]> {
-  // 1. Try Capgo native picker
-  const capgo = await capgoPick();
-  if (capgo !== null && capgo.length > 0) return capgo;
-
-  // 2. Try custom KissContacts plugin if present
+  // 1. Try custom KissContacts plugin first on Android (launches native contact picker intent)
   const plugin = await getKissContactsPlugin();
   if (plugin) {
     try {
@@ -154,16 +208,16 @@ export async function pickFromPhone(): Promise<PhoneContact[]> {
     }
   }
 
+  // 2. Try Capgo native picker (iOS / platforms where implemented)
+  const capgo = await capgoPick();
+  if (capgo !== null && capgo.length > 0) return capgo;
+
   // 3. Web contact picker fallback
   return webPick();
 }
 
 export async function fetchAllPhoneContacts(): Promise<PhoneContact[]> {
-  // 1. Try Capgo get contacts
-  const capgo = await capgoGetAll();
-  if (capgo !== null && capgo.length > 0) return capgo;
-
-  // 2. Try custom KissContacts plugin if present
+  // 1. Try custom KissContacts plugin if present
   const plugin = await getKissContactsPlugin();
   if (plugin) {
     try {
@@ -187,6 +241,10 @@ export async function fetchAllPhoneContacts(): Promise<PhoneContact[]> {
       console.warn("KissContacts.getContacts error:", err);
     }
   }
+
+  // 2. Try Capgo get contacts
+  const capgo = await capgoGetAll();
+  if (capgo !== null && capgo.length > 0) return capgo;
 
   // 3. Fall back to picker
   return pickFromPhone();

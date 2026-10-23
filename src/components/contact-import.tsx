@@ -1,9 +1,16 @@
 import { useEffect, useRef, useState } from "react";
-import { canPickContacts, fetchAllPhoneContacts, pickFromPhone, type PhoneContact } from "@/lib/contacts";
+import {
+  canPickContacts,
+  fetchAllPhoneContacts,
+  pickFromPhone,
+  requestContactsPermission,
+  type PhoneContact,
+} from "@/lib/contacts";
 import { searchDirectory, sendPhoneKiss } from "@/lib/kisses/server";
 import { rankAt } from "@/lib/kisses/ranks";
 import { Button } from "./ui/button";
 import { Face } from "./face";
+import { ContactPickerSheet } from "./contact-picker-sheet";
 import type { PublicPerson } from "@/lib/kisses/types";
 
 export function ContactImport({
@@ -27,6 +34,7 @@ export function ContactImport({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [pasted, setPasted] = useState("");
+  const [pickerSheetOpen, setPickerSheetOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -64,9 +72,12 @@ export function ContactImport({
     setBusy(true);
     setMessage(null);
     try {
+      if (!given) {
+        await requestContactsPermission();
+      }
       const picked = given ?? (await fetchAllPhoneContacts());
       if (picked.length === 0) {
-        setMessage("No contacts picked or contacts not available");
+        setMessage("No contacts found or permission not granted. Use Browse to pick directly.");
         return;
       }
       setContacts(picked);
@@ -131,9 +142,19 @@ export function ContactImport({
               Import your contacts to find who's already on KISS.
             </p>
             {canPickContacts() ? (
-              <Button size="lg" className="w-full" disabled={busy} onClick={() => void doImport()}>
-                {busy ? "Importing…" : "Import Contacts"}
-              </Button>
+              <div className="flex flex-col gap-2.5">
+                <Button size="lg" className="w-full bg-[#FF2E63] hover:bg-[#FF2E63]/90 text-white font-medium shadow-md shadow-[#FF2E63]/20" disabled={busy} onClick={() => void doImport()}>
+                  {busy ? "Importing…" : "Import All Contacts"}
+                </Button>
+                <Button
+                  size="lg"
+                  variant="secondary"
+                  className="w-full border-white/15 bg-white/5 hover:bg-white/10 text-white"
+                  onClick={() => setPickerSheetOpen(true)}
+                >
+                  Browse / Pick a Friend
+                </Button>
+              </div>
             ) : (
               <>
                 <textarea
@@ -220,6 +241,15 @@ export function ContactImport({
         {message ? (
           <p className="mt-3 text-center text-sm text-muted">{message}</p>
         ) : null}
+
+        <ContactPickerSheet
+          open={pickerSheetOpen}
+          onClose={() => setPickerSheetOpen(false)}
+          onSelect={(c) => {
+            setPickerSheetOpen(false);
+            void doImport([c]);
+          }}
+        />
       </div>
     </div>
   );

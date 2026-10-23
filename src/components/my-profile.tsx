@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { addPhoto, loadGallery, saveGallery, type Gallery } from "@/lib/gallery";
 import { listNicks } from "@/lib/kisses/server";
 import { openWhatsApp } from "@/lib/contacts";
-import { nativeShareOrCopy, publicCatchUrl } from "@/lib/share";
+import { nativeShareOrCopy, publicCatchUrl, publicOrigin } from "@/lib/share";
 import { Achievements } from "./achievements";
 import { Face } from "./face";
 import { QrCodeSection } from "./qr-code-section";
@@ -74,8 +74,8 @@ export function MyProfile({
             type="button"
             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-[#25d366]/15 hover:bg-[#25d366]/25 text-[#25d366] font-medium text-xs transition-colors"
             onClick={() => {
-              const url = publicCatchUrl(name, phone);
-              openWhatsApp("", `Send me a kiss on KISS 💋${url ? `\n${url}` : ""}`);
+              const url = publicCatchUrl(name, phone) || publicOrigin();
+              openWhatsApp("", `Send me a kiss on KISS 💋\n${url}`);
             }}
           >
             <MessageCircle size={15} />
@@ -89,7 +89,7 @@ export function MyProfile({
               const res = await nativeShareOrCopy({
                 title: "KISS",
                 text: `Send me a kiss on KISS 💋`,
-                url: url || window.location.origin,
+                url: url || publicOrigin(),
               });
               if (res === "copied") toast.success("Profile link copied!");
               else if (res === "shared") toast.success("Shared successfully!");

@@ -9,7 +9,7 @@ import { playKiss, unlockSound } from "@/lib/sound";
 import { loadMe } from "@/lib/me";
 import { loadRecents, openWhatsApp } from "@/lib/contacts";
 import { searchDirectory, sendPhoneKiss } from "@/lib/kisses/server";
-import { nativeShareOrCopy, publicCatchUrl } from "@/lib/share";
+import { nativeShareOrCopy, publicCatchUrl, publicOrigin } from "@/lib/share";
 import type { PublicPerson } from "@/lib/kisses/types";
 
 export function CatchScreen({
@@ -151,7 +151,7 @@ export function CatchScreen({
             onClick={() => {
               const me = loadMe();
               const url = publicCatchUrl(me.name || "Someone", me.phone);
-              openWhatsApp("", `I caught a kiss from ${who} on KISS! 💋 Get yours here:\n${url || window.location.origin}`);
+              openWhatsApp("", `I caught a kiss from ${who} on KISS! 💋 Get yours here:\n${url || publicOrigin()}`);
             }}
           >
             <MessageCircle size={14} />
@@ -166,7 +166,7 @@ export function CatchScreen({
               const res = await nativeShareOrCopy({
                 title: "KISS",
                 text: `I caught a kiss from ${who} on KISS! 💋`,
-                url: url || window.location.origin,
+                url: url || publicOrigin(),
               });
               if (res === "copied") toast.success("Kiss link copied!");
               else if (res === "shared") toast.success("Shared successfully!");

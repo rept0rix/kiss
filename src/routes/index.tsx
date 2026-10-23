@@ -20,7 +20,7 @@ import { invalidateHome, invalidatePhoneInbox, useHome, usePhoneHome, usePhoneIn
 import { useKeyboardInset } from "@/hooks/use-keyboard";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { blockPhone, catchKiss, catchPhoneKiss, lookupFace, pingPresence, registerPhone, searchDirectory, sendKiss, sendPhoneKiss, setDisplayName, setPhone, unblockPhone } from "@/lib/kisses/server";
-import { nativeShareOrCopy, publicCatchUrl } from "@/lib/share";
+import { nativeShareOrCopy, publicCatchUrl, publicOrigin } from "@/lib/share";
 import { isLive } from "@/lib/kisses/online";
 import { nextRank, rankAt } from "@/lib/kisses/ranks";
 import type { HomePayload, OrbitItem } from "@/lib/kisses/types";
@@ -876,7 +876,7 @@ function Home() {
           const res = await nativeShareOrCopy({
             title: "KISS",
             text: `Come get a kiss from ${displayName} on KISS! 💋`,
-            url: url || window.location.origin,
+            url: url || publicOrigin(),
           });
           if (res === "copied") toast.success("Kiss link copied!");
           else if (res === "shared") toast.success("Shared successfully!");

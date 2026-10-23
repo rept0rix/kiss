@@ -32,9 +32,25 @@ export function shortCatchUrl(code: string): string | undefined {
   return `${origin}/k/${code}`;
 }
 
-export function publicOrigin(): string | null {
-  if (typeof window === "undefined") return null;
-  return window.location.origin;
+export const PRODUCTION_ORIGIN = "https://app.sendkiss.online";
+
+export function publicOrigin(): string {
+  if (typeof window === "undefined") return PRODUCTION_ORIGIN;
+  const o = window.location.origin;
+  // If running in Capacitor mobile shell, local network IP, or localhost:
+  // Always use production domain so the link works for anyone on any device anywhere!
+  if (
+    !o ||
+    o.includes("localhost") ||
+    o.includes("capacitor://") ||
+    o.includes("127.0.0.1") ||
+    o.includes("192.168.") ||
+    o.includes("10.") ||
+    o.includes("172.")
+  ) {
+    return PRODUCTION_ORIGIN;
+  }
+  return o;
 }
 
 export function cleanName(raw: string): string {

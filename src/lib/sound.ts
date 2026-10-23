@@ -44,8 +44,10 @@ export function setSoundPrefs(next: Partial<SoundPrefs>): SoundPrefs {
   } catch {
     /* ignore */
   }
-  if (prefs.music) startMusic();
-  else stopMusic();
+  if (next.music !== undefined) {
+    if (prefs.music) startMusic();
+    else stopMusic();
+  }
   return getSoundPrefs();
 }
 

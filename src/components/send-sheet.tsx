@@ -18,11 +18,12 @@ import { createShareLink, searchDirectory, sendPhoneKiss } from "@/lib/kisses/se
 import { consumeSuperKiss } from "@/lib/store/server";
 import type { PublicPerson } from "@/lib/kisses/types";
 import { buildKissCard } from "@/lib/kiss-card";
-import { nativeShareOrCopy, shareBody, shortCatchUrl } from "@/lib/share";
+import { nativeShareOrCopy, publicCatchUrl, publicOrigin, shareBody, shortCatchUrl } from "@/lib/share";
 import { Button } from "./ui/button";
 import { Face } from "./face";
 import { Input } from "./ui/input";
 import { KissSkin } from "./kiss-skin";
+import { ContactPickerSheet } from "./contact-picker-sheet";
 
 export type SentPayload = {
   name: string;
@@ -101,6 +102,7 @@ export function SendSheet({
   const [isSuper, setIsSuper] = useState(false);
   const [selectedSkin, setSelectedSkin] = useState<string>(() => rankAt(mySent).skin);
   const [kissCount, setKissCount] = useState<number>(1);
+  const [contactPickerOpen, setContactPickerOpen] = useState(false);
   const picker = canPickContacts();
   useKeyboardInset(open);
 
@@ -171,7 +173,7 @@ export function SendSheet({
         const { code } = await createShareLink({
           data: { fromName: myName, toPhone: tel, fromPhone: myPhone, card },
         });
-        const url = shortCatchUrl(code) ?? `${window.location.origin}/k/${code}`;
+        const url = shortCatchUrl(code) ?? `${publicOrigin()}/k/${code}`;
         if (!gone) {
           setInviteUrl(url);
           setInviteText(shareBody(myName, query, url));
@@ -253,26 +255,31 @@ export function SendSheet({
       .finally(() => setBusy(false));
   }
 
+  function getEffectiveUrl() {
+    return inviteUrl || publicCatchUrl(myName, tel) || publicOrigin();
+  }
+
   function handleWhatsApp(customPhone?: string) {
     const destination = customPhone || tel;
     markInvited();
-    openWhatsApp(destination, inviteText || shareBody(myName, query, inviteUrl));
+    const url = getEffectiveUrl();
+    openWhatsApp(destination, `Come get a kiss from me on KISS 💋\n${url}`);
   }
 
   function handleSms(customPhone?: string) {
     const destination = customPhone || tel;
     markInvited();
-    const text = inviteText || shareBody(myName, query, inviteUrl);
-    window.location.href = smsHref(destination, text);
+    const url = getEffectiveUrl();
+    window.location.href = smsHref(destination, `Come get a kiss from me on KISS 💋\n${url}`);
   }
 
   async function handleShare() {
     markInvited();
-    const text = inviteText || shareBody(myName, query, inviteUrl);
+    const url = getEffectiveUrl();
     const result = await nativeShareOrCopy({
       title: "KISS",
-      text,
-      url: inviteUrl || window.location.origin,
+      text: "Come get a kiss from me 💋",
+      url,
     });
     if (result === "copied") {
       toast.success("Kiss link copied!");
@@ -281,30 +288,30 @@ export function SendSheet({
     }
   }
 
-  async function onPick() {
+  function onPick() {
     setError(null);
-    if (!picker) return;
-    try {
-      const picked = await pickFromPhone();
-      if (picked.length === 0) return;
-      const first = picked[0];
-      if (first) {
-        setQuery(first.name);
-        setTel(first.tel);
+    setContactPickerOpen(true);
+  }
+
+  function handleContactChosen(contact: { name: string; tel: string; photo?: string | null }) {
+    setQuery(contact.name);
+    setTel(contact.tel);
+    void searchDirectory({ data: { q: contact.name || contact.tel, myPhone } }).then((rows) => {
+      const match = rows.find(
+        (r) =>
+          r.phone &&
+          contact.tel &&
+          r.phone.replace(/\D/g, "").slice(-8) === contact.tel.replace(/\D/g, "").slice(-8),
+      );
+      if (match) {
+        setHits([
+          contact.photo ? { ...match, photo: contact.photo, displayName: match.displayName || contact.name } : match,
+          ...rows.filter((r) => r !== match),
+        ]);
+      } else {
+        setHits(rows);
       }
-      const phones = picked.map((c) => c.tel).filter(Boolean);
-      void searchDirectory({ data: { q: first?.name || first?.tel || "", myPhone } }).then((rows) => {
-        const byTail = new Map(picked.map((c) => [c.tel.replace(/\D/g, "").slice(-8), c] as const));
-        setHits(
-          rows.map((r) => {
-            const local = r.phone ? byTail.get(r.phone.slice(-8)) : undefined;
-            return local?.photo ? { ...r, photo: local.photo, displayName: r.displayName || local.name } : r;
-          }),
-        );
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not open contacts");
-    }
+    });
   }
 
   function markInvited() {
@@ -580,13 +587,19 @@ export function SendSheet({
             </button>
             <a
               className="send-link mt-2 w-full"
-              href={smsHref(tel, inviteText || shareBody(myName, query, inviteUrl))}
+              href={smsHref(tel, `Come get a kiss from me on KISS 💋\n${getEffectiveUrl()}`)}
               onClick={() => markInvited()}
             >
               Send via SMS
             </a>
           </div>
         ) : null}
+
+        <ContactPickerSheet
+          open={contactPickerOpen}
+          onClose={() => setContactPickerOpen(false)}
+          onSelect={handleContactChosen}
+        />
       </div>
     </div>
   );

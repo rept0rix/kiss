@@ -5,7 +5,7 @@ import { isBlocked } from "@/lib/block";
 import { formatPhone, openWhatsApp, smsHref } from "@/lib/contacts";
 import { displayName, getNick, setNick } from "@/lib/nicks";
 import { saveNick } from "@/lib/kisses/server";
-import { nativeShareOrCopy, publicCatchUrl } from "@/lib/share";
+import { nativeShareOrCopy, publicCatchUrl, publicOrigin } from "@/lib/share";
 import type { OrbitItem } from "@/lib/kisses/types";
 import { Face } from "./face";
 import { Confirm } from "./confirm";
@@ -115,8 +115,8 @@ export function PersonSheet({
                 type="button"
                 className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-[#25d366]/15 hover:bg-[#25d366]/25 text-[#25d366] font-medium text-xs transition-colors"
                 onClick={() => {
-                  const url = publicCatchUrl(myName || "Someone", tel);
-                  const msg = `Come get a kiss from me on KISS 💋${url ? `\n${url}` : ""}`;
+                  const url = publicCatchUrl(myName || "Someone", tel) || publicOrigin();
+                  const msg = `Come get a kiss from me on KISS 💋\n${url}`;
                   openWhatsApp(tel, msg);
                 }}
                 title="Send on WhatsApp"
@@ -126,7 +126,7 @@ export function PersonSheet({
               </button>
               <a
                 className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-medium text-xs transition-colors"
-                href={smsHref(tel, `Come get a kiss from me on KISS 💋\n${publicCatchUrl(myName || "Someone", tel) || ""}`)}
+                href={smsHref(tel, `Come get a kiss from me on KISS 💋\n${publicCatchUrl(myName || "Someone", tel) || publicOrigin()}`)}
                 title="Send SMS"
               >
                 <Smartphone size={15} />
@@ -142,7 +142,7 @@ export function PersonSheet({
               const res = await nativeShareOrCopy({
                 title: "KISS",
                 text: `Come get a kiss from ${myName || "Someone"} on KISS 💋`,
-                url: url || window.location.origin,
+                url: url || publicOrigin(),
               });
               if (res === "copied") toast.success("Kiss link copied!");
               else if (res === "shared") toast.success("Shared successfully!");
