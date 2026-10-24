@@ -210,3 +210,67 @@ export async function sendTestNotification(): Promise<void> {
   await triggerHaptic();
   await notifyKiss("KISS Test 💋", 1);
 }
+
+let pushInitialized = false;
+
+/**
+ * Register device for native push notifications (APNs / FCM)
+ * and save token to backend database so closed apps can receive kisses.
+ */
+export async function registerNativePush(phone: string): Promise<boolean> {
+  if (typeof window === "undefined" || !phone) return false;
+  if (pushInitialized) return true;
+
+  try {
+    const { Capacitor } = await import("@capacitor/core");
+    if (!Capacitor.isNativePlatform()) return false;
+
+    const { PushNotifications } = await import("@capacitor/push-notifications");
+
+    // Check / Request permissions
+    const perm = await PushNotifications.checkPermissions();
+    let granted = perm.receive === "granted";
+    if (!granted) {
+      const req = await PushNotifications.requestPermissions();
+      granted = req.receive === "granted";
+    }
+    if (!granted) return false;
+
+    // Listen for registration token
+    await PushNotifications.addListener("registration", async (token) => {
+      console.log("[push] Token received:", token.value);
+      try {
+        const { registerPushToken } = await import("@/lib/kisses/server");
+        await registerPushToken({
+          data: {
+            phone,
+            token: token.value,
+            platform: Capacitor.getPlatform(),
+          },
+        });
+      } catch (err) {
+        console.warn("[push] Failed to store token:", err);
+      }
+    });
+
+    await PushNotifications.addListener("registrationError", (err) => {
+      console.warn("[push] Registration error:", err.error);
+    });
+
+    // Listen for incoming notifications when app is open or opened from push
+    await PushNotifications.addListener("pushNotificationReceived", (notification) => {
+      void triggerHaptic();
+      toast(notification.title || "KISS 💋", {
+        description: notification.body,
+        duration: 4500,
+      });
+    });
+
+    await PushNotifications.register();
+    pushInitialized = true;
+    return true;
+  } catch (err) {
+    console.warn("[push] Native push init failed:", err);
+    return false;
+  }
+}

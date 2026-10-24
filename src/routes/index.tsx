@@ -29,7 +29,7 @@ import { blockLocal, isBlocked, unblockLocal } from "@/lib/block";
 import { phonesMatch } from "@/lib/phone";
 import { addPhoto, loadGallery, saveGallery } from "@/lib/gallery";
 import { cropPhoto, loadMe, saveMe, type MeState } from "@/lib/me";
-import { askNotify, notifyKiss } from "@/lib/notify";
+import { askNotify, notifyKiss, registerNativePush } from "@/lib/notify";
 import { playCelebrate, soundsOn, startMusic, unlockSound } from "@/lib/sound";
 import { canSuper, consumeSuper, openSuperWindow, superState } from "@/lib/super";
 import { getSuperBalance } from "@/lib/store/server";
@@ -211,6 +211,12 @@ function Home() {
     patch({ phone: digits, entered: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search.p]);
+
+  useEffect(() => {
+    if (me.phone) {
+      void registerNativePush(me.phone);
+    }
+  }, [me.phone]);
 
   useEffect(() => {
     if (typeof serverSent === "number" && serverSent !== me.sent) {

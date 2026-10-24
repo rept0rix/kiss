@@ -30,6 +30,7 @@
     "@capacitor/haptics": "^7.0.5",
     "@capacitor/ios": "^7.6.9",
     "@capacitor/local-notifications": "^7.0.7",
+    "@capacitor/push-notifications": "^7.0.7",
     "@capgo/capacitor-contacts": "^7.1.2",
     "@electric-sql/pglite": "^0.5.4",
     "@hookform/resolvers": "^5.7.0",

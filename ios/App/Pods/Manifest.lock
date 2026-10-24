@@ -10,6 +10,8 @@ PODS:
     - Capacitor
   - CapacitorLocalNotifications (7.0.7):
     - Capacitor
+  - CapacitorPushNotifications (7.0.7):
+    - Capacitor
   - CapgoCapacitorContacts (7.1.2):
     - Capacitor
 
@@ -20,6 +22,7 @@ DEPENDENCIES:
   - "CapacitorCordova (from `../../node_modules/@capacitor/ios`)"
   - "CapacitorHaptics (from `../../node_modules/@capacitor/haptics`)"
   - "CapacitorLocalNotifications (from `../../node_modules/@capacitor/local-notifications`)"
+  - "CapacitorPushNotifications (from `../../node_modules/@capacitor/push-notifications`)"
   - "CapgoCapacitorContacts (from `../../node_modules/@capgo/capacitor-contacts`)"
 
 EXTERNAL SOURCES:
@@ -35,6 +38,8 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capacitor/haptics"
   CapacitorLocalNotifications:
     :path: "../../node_modules/@capacitor/local-notifications"
+  CapacitorPushNotifications:
+    :path: "../../node_modules/@capacitor/push-notifications"
   CapgoCapacitorContacts:
     :path: "../../node_modules/@capgo/capacitor-contacts"
 
@@ -45,8 +50,9 @@ SPEC CHECKSUMS:
   CapacitorCordova: 2080fc0d6bfbc9dcc0e6d88e77fa624190d343ca
   CapacitorHaptics: 1b145fa83c622e5383a3bac04ea81e2514f0b0f5
   CapacitorLocalNotifications: 71124afe526ac00585314bff34651bd023f86e37
+  CapacitorPushNotifications: 0527809a9619ed775439d5ab2c2d996122b48319
   CapgoCapacitorContacts: ea724121fe0f4f80377dc46ecb0390ce67dc9b2c
 
-PODFILE CHECKSUM: a7112df842313044c93bd213f0148d90872bfb05
+PODFILE CHECKSUM: f35f58eab0196af61c1397ac28c77d995648e5aa
 
 COCOAPODS: 1.17.0

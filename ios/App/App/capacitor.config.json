@@ -32,6 +32,7 @@
 		"CAPBrowserPlugin",
 		"HapticsPlugin",
 		"LocalNotificationsPlugin",
+		"PushNotificationsPlugin",
 		"CapacitorContactsPlugin"
 	]
 }

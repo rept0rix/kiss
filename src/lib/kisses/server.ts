@@ -1270,6 +1270,18 @@ export const sendPhoneKiss = createServerFn({ method: "POST" })
         on conflict (phone) do update set last_seen = now()
       `;
     }
+    // Check for push tokens to notify recipient
+    try {
+      const tokens = await sql<{ token: string; platform: string }>`
+        select token, platform from phone_push_tokens
+        where phone_match(phone, ${to.phone})
+      `.catch(() => [] as Array<{ token: string; platform: string }>);
+      if (tokens.length > 0) {
+        console.log(`[push] ${tokens.length} token(s) available for recipient ${to.phone}`);
+      }
+    } catch {
+      /* non-fatal */
+    }
     return { id, count: n, toName, toPhone: to.phone };
   });
 
@@ -1642,5 +1654,28 @@ export const listNicks = createServerFn({ method: "POST" })
       return [];
     }
   });
+
+export const registerPushToken = createServerFn({ method: "POST" })
+  .validator((data: { phone: string; token: string; platform?: string }) => data)
+  .handler(async ({ data }) => {
+    const phone = normalizePhone(data.phone);
+    if (phone.length < MIN_PHONE_DIGITS || !data.token?.trim()) {
+      return { ok: false, error: "Invalid phone or token" };
+    }
+    const sql = await getSql();
+    const platform = data.platform?.slice(0, 16) || "unknown";
+    try {
+      await sql`
+        insert into phone_push_tokens (phone, token, platform, updated_at)
+        values (${phone}, ${data.token.trim()}, ${platform}, now())
+        on conflict (phone, token) do update set updated_at = now(), platform = ${platform}
+      `;
+      return { ok: true };
+    } catch (err) {
+      console.error("[push] Failed to store push token:", err);
+      return { ok: false, error: String(err) };
+    }
+  });
+
 
 

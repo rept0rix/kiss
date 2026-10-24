@@ -182,6 +182,7 @@ if [[ "$CONFIGURATION" == "Debug" ]]; then
   install_framework "${BUILT_PRODUCTS_DIR}/CapacitorCordova/Cordova.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/CapacitorHaptics/CapacitorHaptics.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/CapacitorLocalNotifications/CapacitorLocalNotifications.framework"
+  install_framework "${BUILT_PRODUCTS_DIR}/CapacitorPushNotifications/CapacitorPushNotifications.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/CapgoCapacitorContacts/CapgoCapacitorContacts.framework"
 fi
 if [[ "$CONFIGURATION" == "Release" ]]; then
@@ -191,6 +192,7 @@ if [[ "$CONFIGURATION" == "Release" ]]; then
   install_framework "${BUILT_PRODUCTS_DIR}/CapacitorCordova/Cordova.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/CapacitorHaptics/CapacitorHaptics.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/CapacitorLocalNotifications/CapacitorLocalNotifications.framework"
+  install_framework "${BUILT_PRODUCTS_DIR}/CapacitorPushNotifications/CapacitorPushNotifications.framework"
   install_framework "${BUILT_PRODUCTS_DIR}/CapgoCapacitorContacts/CapgoCapacitorContacts.framework"
 fi
 if [ "${COCOAPODS_PARALLEL_CODE_SIGN}" == "true" ]; then
