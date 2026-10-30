@@ -492,6 +492,133 @@
   background: linear-gradient(180deg, #ff5468, #b1101f); color: #fff;
   box-shadow: 0 4px 12px rgba(227,27,46,0.4);
 }
-.kiss-type button:disabled { opacity: 0.45; }
 .kiss-type-dot { width: 0.6rem; height: 0.6rem; border-radius: 999px; background: var(--color-primary); }
 .kiss-type button.is-on .kiss-type-dot { background: #fff; }
+
+/* Quick action bar in Send sheet & sheets */
+.quick-actions-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+  margin-bottom: 0.5rem;
+}
+
+.quick-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.55rem 0.2rem;
+  border-radius: var(--radius-md, 0.75rem);
+  background: var(--color-elevated);
+  border: 1px solid var(--color-border);
+  color: var(--color-fg);
+  font-size: 0.72rem;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.quick-action-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--color-subtle);
+}
+
+.quick-action-btn.is-wa {
+  color: #25d366;
+  border-color: rgba(37, 211, 102, 0.3);
+}
+
+.quick-action-btn.is-wa:hover {
+  background: rgba(37, 211, 102, 0.12);
+}
+
+.quick-action-btn.is-share {
+  color: #6ee7ff;
+  border-color: rgba(110, 231, 255, 0.3);
+}
+
+.quick-action-btn.is-sms {
+  color: #ffd36e;
+  border-color: rgba(255, 211, 110, 0.3);
+}
+
+/* Kiss count multipliers */
+.kiss-count-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  margin-top: 0.55rem;
+}
+
+.kiss-count-label {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  font-weight: 500;
+}
+
+.kiss-count-chip {
+  flex: 1;
+  height: 2.1rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-elevated);
+  color: var(--color-fg);
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.kiss-count-chip.is-on {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+}
+
+/* Inline skin selector */
+.kiss-skins-row {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding: 0.35rem 0.1rem;
+  margin-top: 0.45rem;
+  scrollbar-width: none;
+}
+
+.kiss-skins-row::-webkit-scrollbar {
+  display: none;
+}
+
+.kiss-skin-pill {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-elevated);
+  color: var(--color-fg);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.kiss-skin-pill.is-on {
+  border-color: var(--color-primary);
+  background: rgba(225, 29, 46, 0.15);
+  color: #fff;
+  font-weight: 600;
+}
+
+.kiss-skin-mini {
+  width: 1rem;
+  height: 0.75rem;
+}
+

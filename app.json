@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "KISS",
+    "slug": "kiss",
+    "android": {
+      "package": "online.sendkiss.app"
+    },
+    "ios": {
+      "bundleIdentifier": "online.sendkiss.app"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "eebf87b7-503d-4e20-9d29-e3c6b169d4ca"
+      }
+    }
+  }
+}

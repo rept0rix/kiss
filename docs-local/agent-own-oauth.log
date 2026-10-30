@@ -1,0 +1,42 @@
+Own Google/X sign-in is implemented and committed as `64ec05b` on `cursor/own-oauth`. It is not pushed, and only the changed files were staged. `android/`, `ios/`, the `docs/AGENT-PROMPT-PHOTOS*` files, the stash and other branches are untouched.
+
+**Checks**
+
+| Check | Result |
+| --- | --- |
+| `npx tsc --noEmit` | Passes, no errors |
+| ESLint on changed files | 0 errors. One existing warning in `use-current-user.ts`, which I didn't touch |
+| `vite build` (with `DATABASE_URL` explicitly unset) | Passes |
+| New auth-env tests | 10 of 10 pass |
+| TypeScript test stage | 43 of 43 pass |
+| Script test stage | 140 pass, 9 fail |
+
+- **The 9 script failures were already there.** They are all in `migration-plan.test.mjs` and `grok-pwa-plugin.test.mjs` (share-card meta tags and where the auth schema file lives), and neither test reads any file I changed. AGENTS.md says 11, but main has changed since that was written. Because this stage fails, `npm test` never reaches the TypeScript stage, so I ran that stage directly.
+- **Manual smoke test** on a throwaway dev server:
+  - With a deployed-style env, Better Auth returned a Google URL with `redirect_uri=https://app.sendkiss.online/api/auth/callback/google&prompt=select_account`.
+  - In sandbox mode, the endpoint still lists the two broker providers (`grok-google`, `grok-x`).
+  - With the secret unset, the endpoint returned `[]`, the home page returned 200 and the `[auth] … DISABLED` error was logged. However, the gitignored local `.env` sets `BETTER_AUTH_URL=http://localhost:8080`, so that run was disabled by the new localhost guard, not the missing secret. The missing-secret case is covered by the unit tests.
+
+**Decision for you: I kept what `authConfigured` means.** Today it is effectively `!authDisabled` everywhere, because the preview-client fallback always supplied credentials. If it became false while `DATABASE_URL` is set, `requireUserId` would throw on every server function. That would break phone-only production, which you asked me to avoid. So it keeps its current meaning ("session enforcement on"). I added a separate `signInConfigured` export for "at least one social or broker method is enabled". This departs from the wording in your spec; say if you'd rather have it the other way.
+
+**Files changed**
+- `src/lib/auth/auth-env.ts` (new): the pure helper. It exports `resolveAuthEnv`, `enabledProviders` and `socialCallbackURL`.
+- `src/lib/auth/auth-env.test.ts` (new), added to the `npm test` script in `package.json`.
+- `src/routes/api/auth-providers.ts` (new): `GET /api/auth-providers` returns `{ providers: [{id, label, kind}] }` with no secrets and `no-store` caching. `src/routeTree.gen.ts` was regenerated to include it.
+- `src/lib/auth/server.ts`:
+  - When deployed, the origin comes only from `BETTER_AUTH_URL` or `VERCEL_PROJECT_PRODUCTION_URL`.
+  - A missing origin or secret logs a loud error and disables all OAuth sign-in instead of crashing.
+  - Google (with `prompt: "select_account"`) and X are added under `socialProviders` when their credentials are set.
+  - The Grok broker only runs with real `GROK_AUTH_*` credentials when deployed; the preview client remains for the sandbox.
+- `src/lib/auth/providers.ts`: typed social and broker provider list.
+- `src/lib/auth/client.ts`: `signIn` uses `signIn.social` for Google/X and keeps the existing broker/popup path. Added `useEnabledProviders()`, which uses react-query, caches for 5 minutes and returns `[]` on error.
+- `src/components/more-menu.tsx`: buttons come from the server's list, and the whole "Sign in" section is hidden when it's empty.
+- `README.md` (new "Auth" section) and `AGENTS.md`: env vars and the callback URLs to register.
+
+**Beyond the spec**
+- When deployed, a `localhost`/`127.0.0.1` `BETTER_AUTH_URL` is also rejected and disables sign-in.
+- When deployed with no resolvable origin, Better Auth gets a placeholder origin (`https://origin-not-configured.invalid`) so it still builds. Nothing uses it for sign-in, since sign-in is disabled in that case.
+
+**Left out**
+- Social providers always use a full-page redirect, so they won't work inside the sandbox live-preview iframe. The sandbox still uses the broker popup, so it isn't affected.
+- No Vercel, Neon or OAuth-console changes, per your instructions.

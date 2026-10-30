@@ -11,6 +11,62 @@ export type Track = { id: string; name: string; builtin?: boolean };
 let audioEl: HTMLAudioElement | null = null;
 let objectUrl: string | null = null;
 let playing = false;
+let backgroundPaused = false;
+let listenersAttached = false;
+
+if (typeof window !== "undefined") {
+  setupBackgroundListeners();
+}
+
+function setupBackgroundListeners(): void {
+  if (typeof window === "undefined" || listenersAttached) return;
+  listenersAttached = true;
+
+  // 1. Web visibility change (browser tabs, minimized window, mobile browser)
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      pauseForBackground();
+    } else {
+      resumeFromBackground();
+    }
+  });
+
+  // 2. Page lifecycle events
+  window.addEventListener("pagehide", () => pauseForBackground());
+  window.addEventListener("pageshow", () => resumeFromBackground());
+
+  // 3. Capacitor Native App State change (iOS/Android when app goes to background / screen lock)
+  void import("@capacitor/app")
+    .then(({ App }) => {
+      App.addListener("appStateChange", ({ isActive }) => {
+        if (!isActive) {
+          pauseForBackground();
+        } else {
+          resumeFromBackground();
+        }
+      }).catch(() => undefined);
+    })
+    .catch(() => undefined);
+}
+
+export function pauseForBackground(): void {
+  if (audioEl && !audioEl.paused) {
+    audioEl.pause();
+    backgroundPaused = true;
+  }
+}
+
+export function resumeFromBackground(): void {
+  if (backgroundPaused) {
+    backgroundPaused = false;
+    if (playing && audioEl) {
+      void audioEl.play().catch(() => {
+        // Autoplay may need a user gesture if context expired
+        playing = false;
+      });
+    }
+  }
+}
 
 function open(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -83,12 +139,14 @@ function release(): void {
 
 export function stopTrack(): void {
   playing = false;
+  backgroundPaused = false;
   release();
 }
 
 /** Plays the active track on loop. Safe to call repeatedly. */
 export async function playActiveTrack(): Promise<void> {
   if (typeof window === "undefined" || playing) return;
+  setupBackgroundListeners();
   playing = true;
   const id = getActiveId();
   let url: string = BUILTIN.url;

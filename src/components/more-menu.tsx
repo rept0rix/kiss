@@ -1,5 +1,5 @@
-import { Gift, QrCode, Settings, Sparkles, UserRound, Users } from "lucide-react";
-import { GROK_PROVIDERS, authEnabled, signIn } from "@/lib/auth/client";
+import { Gift, QrCode, Settings, Share2, Smartphone, Sparkles, UserRound, Users } from "lucide-react";
+import { authEnabled, signIn, useEnabledProviders } from "@/lib/auth/client";
 
 type Action = { key: string; label: string; icon: typeof QrCode; run: () => void };
 
@@ -12,6 +12,8 @@ export function MoreMenu({
   onSkins,
   onSuper,
   onSettings,
+  onPhone,
+  onShare,
 }: {
   open: boolean;
   onClose: () => void;
@@ -21,10 +23,15 @@ export function MoreMenu({
   onSkins: () => void;
   onSuper: () => void;
   onSettings: () => void;
+  onPhone?: () => void;
+  onShare?: () => void;
 }) {
+  const providers = useEnabledProviders();
   if (!open) return null;
   const actions: Action[] = [
     { key: "profile", label: "My profile", icon: UserRound, run: onProfile },
+    ...(onShare ? [{ key: "share", label: "Share KISS", icon: Share2, run: onShare }] : []),
+    ...(onPhone ? [{ key: "phone", label: "Change number", icon: Smartphone, run: onPhone }] : []),
     { key: "scan", label: "Scan QR", icon: QrCode, run: onScan },
     { key: "import", label: "Import contacts", icon: Users, run: onImport },
     { key: "skins", label: "Skins", icon: Sparkles, run: onSkins },
@@ -57,16 +64,16 @@ export function MoreMenu({
             </li>
           ))}
         </ul>
-        {authEnabled ? (
+        {authEnabled && providers.length > 0 ? (
           <>
             <p className="connect-label">Sign in</p>
             <div className="social-row">
-              {GROK_PROVIDERS.map((p) => (
+              {providers.map((p) => (
                 <button
-                  key={p.providerId}
+                  key={p.id}
                   type="button"
                   className="more-item more-social"
-                  onClick={() => signIn(p.providerId, { callbackURL: "/" })}
+                  onClick={() => signIn(p.id, { callbackURL: "/" })}
                 >
                   {p.label}
                 </button>

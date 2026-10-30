@@ -1198,9 +1198,8 @@ export const searchDirectory = createServerFn({ method: "POST" })
       }
       if (!name && !phone) continue;
       seen.add(key);
-      const wantPhoto = qName.length >= 2 || lookingPhone;
       const photo =
-        wantPhoto && typeof r.photo === "string" && r.photo.startsWith("data:") ? r.photo : null;
+        typeof r.photo === "string" && (r.photo.startsWith("data:") || r.photo.startsWith("http")) ? r.photo : null;
       const uid = typeof r.user_id === "string" ? r.user_id : `p:${phone || name}`;
       out.push({
         userId: uid,
@@ -1271,6 +1270,18 @@ export const sendPhoneKiss = createServerFn({ method: "POST" })
         on conflict (phone) do update set last_seen = now()
       `;
     }
+    // Check for push tokens to notify recipient
+    try {
+      const tokens = await sql<{ token: string; platform: string }>`
+        select token, platform from phone_push_tokens
+        where phone_match(phone, ${to.phone})
+      `.catch(() => [] as Array<{ token: string; platform: string }>);
+      if (tokens.length > 0) {
+        console.log(`[push] ${tokens.length} token(s) available for recipient ${to.phone}`);
+      }
+    } catch {
+      /* non-fatal */
+    }
     return { id, count: n, toName, toPhone: to.phone };
   });
 
@@ -1280,6 +1291,7 @@ export const phoneInbox = createServerFn({ method: "POST" })
     const phone = normalizePhone(raw);
     if (phone.length < MIN_PHONE_DIGITS) return [];
     const sql = await getSql();
+    void sql`update phone_book set last_seen = now() where phone_match(phone, ${phone})`.catch(() => undefined);
     const rows = await sql<{
       id: number;
       from_phone: string;
@@ -1321,6 +1333,35 @@ export const phoneInbox = createServerFn({ method: "POST" })
       blocked = [];
     }
     return mapped.filter((r) => !blocked.some((b) => phonesMatch(b.blocked_phone, r.fromPhone)));
+  });
+
+export const pingPresence = createServerFn({ method: "POST" })
+  .validator((data: { phone: string; name?: string }) => data)
+  .handler(async ({ data }) => {
+    const phone = normalizePhone(data.phone);
+    if (phone.length < MIN_PHONE_DIGITS) return { ok: false };
+    const sql = await getSql();
+    await sql`
+      update phone_book set last_seen = now() where phone_match(phone, ${phone})
+    `.catch(() => undefined);
+    return { ok: true };
+  });
+
+export const updateProfilePhoto = createServerFn({ method: "POST" })
+  .validator((data: { phone: string; photo: string | null; name?: string }) => data)
+  .handler(async ({ data }) => {
+    const phone = normalizePhone(data.phone);
+    if (phone.length < MIN_PHONE_DIGITS) return { ok: false };
+    const sql = await getSql();
+    const photo = data.photo && (data.photo.startsWith("data:") || data.photo.startsWith("http")) ? data.photo.slice(0, 150000) : null;
+    await sql`
+      insert into phone_book (phone, display_name, photo, last_seen)
+      values (${phone}, ${data.name || ""}, ${photo}, now())
+      on conflict (phone) do update set
+        photo = excluded.photo,
+        last_seen = now()
+    `.catch(() => undefined);
+    return { ok: true };
   });
 
 /** Home counters for a phone identity — what a signed-out user restores after a wipe. */
@@ -1613,5 +1654,28 @@ export const listNicks = createServerFn({ method: "POST" })
       return [];
     }
   });
+
+export const registerPushToken = createServerFn({ method: "POST" })
+  .validator((data: { phone: string; token: string; platform?: string }) => data)
+  .handler(async ({ data }) => {
+    const phone = normalizePhone(data.phone);
+    if (phone.length < MIN_PHONE_DIGITS || !data.token?.trim()) {
+      return { ok: false, error: "Invalid phone or token" };
+    }
+    const sql = await getSql();
+    const platform = data.platform?.slice(0, 16) || "unknown";
+    try {
+      await sql`
+        insert into phone_push_tokens (phone, token, platform, updated_at)
+        values (${phone}, ${data.token.trim()}, ${platform}, now())
+        on conflict (phone, token) do update set updated_at = now(), platform = ${platform}
+      `;
+      return { ok: true };
+    } catch (err) {
+      console.error("[push] Failed to store push token:", err);
+      return { ok: false, error: String(err) };
+    }
+  });
+
 
 

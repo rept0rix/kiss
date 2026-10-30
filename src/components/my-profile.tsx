@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
+import { MessageCircle, Share2 } from "lucide-react";
+import { toast } from "sonner";
 import { addPhoto, loadGallery, saveGallery, type Gallery } from "@/lib/gallery";
 import { listNicks } from "@/lib/kisses/server";
+import { openWhatsApp } from "@/lib/contacts";
+import { nativeShareOrCopy, publicCatchUrl, publicOrigin } from "@/lib/share";
 import { Achievements } from "./achievements";
 import { Face } from "./face";
 import { QrCodeSection } from "./qr-code-section";
@@ -64,6 +68,38 @@ export function MyProfile({
           <p className="person-ago">No nicknames yet</p>
         )}
         <QrCodeSection phone={phone} name={name} />
+
+        <div className="flex gap-2 w-full mt-2 mb-4 justify-center">
+          <button
+            type="button"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-[#25d366]/15 hover:bg-[#25d366]/25 text-[#25d366] font-medium text-xs transition-colors"
+            onClick={() => {
+              const url = publicCatchUrl(name, phone) || publicOrigin();
+              openWhatsApp("", `Send me a kiss on KISS 💋\n${url}`);
+            }}
+          >
+            <MessageCircle size={15} />
+            <span>Share via WhatsApp</span>
+          </button>
+          <button
+            type="button"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-white font-medium text-xs transition-colors"
+            onClick={async () => {
+              const url = publicCatchUrl(name, phone);
+              const res = await nativeShareOrCopy({
+                title: "KISS",
+                text: `Send me a kiss on KISS 💋`,
+                url: url || publicOrigin(),
+              });
+              if (res === "copied") toast.success("Profile link copied!");
+              else if (res === "shared") toast.success("Shared successfully!");
+            }}
+          >
+            <Share2 size={15} />
+            <span>Share Link</span>
+          </button>
+        </div>
+
         <Achievements sent={sent} received={caught} />
         <p className="catch-pass-label">Photos</p>
         <ul className="photo-grid">
