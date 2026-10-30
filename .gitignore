@@ -18,3 +18,4 @@ dist/
 kiss/
 ios/build/
 *.xcarchive
+store_assets/raw_video/

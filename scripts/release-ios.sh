@@ -45,8 +45,7 @@ xcodebuild \
   -exportArchive \
   -archivePath "$ARCHIVE_PATH" \
   -exportOptionsPlist "$EXPORT_OPTIONS" \
-  -exportPath "$EXPORT_PATH" \
-  -allowProvisioningUpdates
+  -exportPath "$EXPORT_PATH"
 
 IPA_FILE="$EXPORT_PATH/App.ipa"
 if [ ! -f "$IPA_FILE" ]; then
@@ -54,6 +53,11 @@ if [ ! -f "$IPA_FILE" ]; then
 fi
 
 echo "🎉 IPA successfully created at: $IPA_FILE"
+
+# Source local credentials if available
+if [ -f "$HOME/.private_keys/app-store-connect.env" ]; then
+  source "$HOME/.private_keys/app-store-connect.env"
+fi
 
 # 4. Upload to App Store Connect / TestFlight if credentials provided
 UPLOAD="${1:-}"
