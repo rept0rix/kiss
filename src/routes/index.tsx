@@ -20,7 +20,7 @@ import { LipsMark } from "@/components/lips-mark";
 import { invalidateHome, invalidatePhoneInbox, useHome, usePhoneHome, usePhoneInbox, usePhoneStats } from "@/hooks/use-home";
 import { useKeyboardInset } from "@/hooks/use-keyboard";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { blockPhone, catchKiss, catchPhoneKiss, lookupFace, pingPresence, registerPhone, searchDirectory, sendKiss, sendPhoneKiss, setDisplayName, setPhone, unblockPhone } from "@/lib/kisses/server";
+import { blockPhone, catchKiss, catchPhoneKiss, listIncomingPhoneRequests, lookupFace, pingPresence, registerPhone, searchDirectory, sendKiss, sendPhoneKiss, setDisplayName, setPhone, unblockPhone } from "@/lib/kisses/server";
 import { nativeShareOrCopy, publicCatchUrl, publicOrigin } from "@/lib/share";
 import { isLive } from "@/lib/kisses/online";
 import { nextRank, rankAt } from "@/lib/kisses/ranks";
@@ -132,6 +132,9 @@ function Home() {
   const [superStoreOpen, setSuperStoreOpen] = useState(false);
   const [superCount, setSuperCount] = useState(0);
   const [selectedSkin, setSelectedSkin] = useState("classic");
+  const [incomingPhoneRequests, setIncomingPhoneRequests] = useState<
+    Array<{ id: number; fromPhone: string; fromName: string }>
+  >([]);
   const liveUser = user && !user.isDevFallback ? user : null;
   const home = useHome(Boolean(liveUser));
   const phoneBox = usePhoneInbox(me.phone);
@@ -217,6 +220,24 @@ function Home() {
     if (me.phone) {
       void registerNativePush(me.phone);
     }
+  }, [me.phone]);
+
+  useEffect(() => {
+    if (!isValidPhone(me.phone)) return;
+    let active = true;
+    const fetchRequests = () => {
+      void listIncomingPhoneRequests({ data: { myPhone: me.phone } })
+        .then((res) => {
+          if (active) setIncomingPhoneRequests(res);
+        })
+        .catch(() => undefined);
+    };
+    fetchRequests();
+    const interval = window.setInterval(fetchRequests, 20000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
   }, [me.phone]);
 
   useEffect(() => {
@@ -667,6 +688,38 @@ function Home() {
             setSendOpen(true);
           }}
         />
+
+        {incomingPhoneRequests.length > 0 ? (
+          <div className="fixed top-12 left-1/2 -translate-x-1/2 z-40 max-w-sm w-[92%] pointer-events-auto">
+            <div className="bg-gradient-to-r from-red-950/95 via-zinc-900/95 to-zinc-900/95 border border-red-500/40 rounded-2xl p-3 shadow-2xl backdrop-blur-md flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="text-xl shrink-0">📱</span>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-white truncate">
+                    {incomingPhoneRequests[0].fromName} wants your number
+                  </p>
+                  <p className="text-[10px] text-zinc-400">Tap to review request</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="px-3 py-1.5 rounded-xl bg-[#e11d2e] hover:bg-[#ff2a4d] text-white text-xs font-bold shrink-0 shadow active:scale-95 transition-all"
+                onClick={() => {
+                  const req = incomingPhoneRequests[0];
+                  setPerson({
+                    id: `req-${req.fromPhone}`,
+                    dir: "in",
+                    name: req.fromName,
+                    status: "caught",
+                    tel: req.fromPhone,
+                  } as OrbitItem);
+                }}
+              >
+                Review
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         <div className="stage-left">
         <NameLine

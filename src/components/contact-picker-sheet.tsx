@@ -3,6 +3,7 @@ import {
   checkContactsPermission,
   fetchAllPhoneContacts,
   formatPhone,
+  markPhoneAsKnown,
   nameHue,
   openContactsSettings,
   openWhatsApp,
@@ -70,6 +71,9 @@ export function ContactPickerSheet({
     try {
       const list = await fetchAllPhoneContacts();
       setContacts(list);
+      for (const c of list) {
+        if (c.tel) markPhoneAsKnown(c.tel);
+      }
 
       // Check which contacts already use SendKiss
       if (list.length > 0) {

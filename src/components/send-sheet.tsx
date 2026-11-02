@@ -18,6 +18,7 @@ import {
   isPhoneIdentity,
   isValidPhone,
   loadRecents,
+  markPhoneAsKnown,
   openWhatsApp,
   pickFromPhone,
   rememberContact,
@@ -238,8 +239,10 @@ export function SendSheet({
   }).map((p) => (p.photo && myPhoto && p.photo === myPhoto ? { ...p, photo: null } : p));
 
   function finishInApp(toName: string, userId?: string, count = kissCount, phone?: string) {
-    rememberContact({ name: toName, tel: phone || tel });
-    onSent({ name: toName, status: "waiting", tel: phone || tel, userId, count });
+    const targetTel = phone || tel;
+    if (targetTel) markPhoneAsKnown(targetTel);
+    rememberContact({ name: toName, tel: targetTel });
+    onSent({ name: toName, status: "waiting", tel: targetTel, userId, count });
     onClose();
   }
 

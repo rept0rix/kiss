@@ -1889,5 +1889,145 @@ export const registerPushToken = createServerFn({ method: "POST" })
     }
   });
 
+export interface PhoneShareStatus {
+  canView: boolean;
+  status: "none" | "pending_sent" | "pending_received" | "approved" | "declined";
+  requestId?: number;
+  requesterName?: string;
+}
+
+export const getPhoneShareStatus = createServerFn({ method: "POST" })
+  .validator((data: { myPhone: string; otherPhone: string }) => data)
+  .handler(async ({ data }): Promise<PhoneShareStatus> => {
+    const me = normalizePhone(data.myPhone);
+    const other = normalizePhone(data.otherPhone);
+    if (me.length < MIN_PHONE_DIGITS || other.length < MIN_PHONE_DIGITS) {
+      return { canView: false, status: "none" };
+    }
+    if (phonesMatch(me, other)) {
+      return { canView: true, status: "approved" };
+    }
+    const sql = await getSql();
+    try {
+      const rows = await sql<{
+        id: number;
+        from_phone: string;
+        from_name: string | null;
+        to_phone: string;
+        status: string;
+      }>`
+        select id, from_phone, from_name, to_phone, status
+        from phone_share_requests
+        where (phone_match(from_phone, ${me}) and phone_match(to_phone, ${other}))
+           or (phone_match(from_phone, ${other}) and phone_match(to_phone, ${me}))
+        order by updated_at desc
+        limit 1
+      `;
+      if (!rows.length) return { canView: false, status: "none" };
+      const r = rows[0];
+      if (r.status === "approved") {
+        return { canView: true, status: "approved", requestId: r.id };
+      }
+      if (phonesMatch(r.from_phone, me)) {
+        return {
+          canView: false,
+          status: r.status === "declined" ? "declined" : "pending_sent",
+          requestId: r.id,
+        };
+      } else {
+        return {
+          canView: false,
+          status: r.status === "declined" ? "declined" : "pending_received",
+          requestId: r.id,
+          requesterName: r.from_name || "Someone",
+        };
+      }
+    } catch {
+      return { canView: false, status: "none" };
+    }
+  });
+
+export const requestPhoneShare = createServerFn({ method: "POST" })
+  .validator((data: { myPhone: string; myName?: string; targetPhone: string }) => data)
+  .handler(async ({ data }): Promise<{ ok: boolean; status: "pending" | "approved"; error?: string }> => {
+    const me = normalizePhone(data.myPhone);
+    const target = normalizePhone(data.targetPhone);
+    if (me.length < MIN_PHONE_DIGITS || target.length < MIN_PHONE_DIGITS) {
+      return { ok: false, status: "pending", error: "Invalid phone number" };
+    }
+    const sql = await getSql();
+    try {
+      const existing = await sql<{ id: number; status: string }>`
+        select id, status from phone_share_requests
+        where phone_match(from_phone, ${target}) and phone_match(to_phone, ${me})
+        limit 1
+      `;
+      if (existing.length > 0) {
+        await sql`
+          update phone_share_requests
+          set status = 'approved', updated_at = now()
+          where id = ${existing[0].id}
+        `;
+        return { ok: true, status: "approved" };
+      }
+
+      await sql`
+        insert into phone_share_requests (from_phone, from_name, to_phone, status, updated_at)
+        values (${me}, ${data.myName || null}, ${target}, 'pending', now())
+        on conflict (from_phone, to_phone) do update
+        set status = 'pending', from_name = excluded.from_name, updated_at = now()
+      `;
+      return { ok: true, status: "pending" };
+    } catch (err) {
+      return { ok: false, status: "pending", error: String(err) };
+    }
+  });
+
+export const respondPhoneShare = createServerFn({ method: "POST" })
+  .validator((data: { myPhone: string; requesterPhone: string; approved: boolean }) => data)
+  .handler(async ({ data }): Promise<{ ok: boolean }> => {
+    const me = normalizePhone(data.myPhone);
+    const requester = normalizePhone(data.requesterPhone);
+    const newStatus = data.approved ? "approved" : "declined";
+    const sql = await getSql();
+    try {
+      await sql`
+        update phone_share_requests
+        set status = ${newStatus}, updated_at = now()
+        where (phone_match(from_phone, ${requester}) and phone_match(to_phone, ${me}))
+           or (phone_match(from_phone, ${me}) and phone_match(to_phone, ${requester}))
+      `;
+      return { ok: true };
+    } catch {
+      return { ok: false };
+    }
+  });
+
+export const listIncomingPhoneRequests = createServerFn({ method: "POST" })
+  .validator((data: { myPhone: string }) => data)
+  .handler(async ({ data }): Promise<Array<{ id: number; fromPhone: string; fromName: string; createdAt: string }>> => {
+    const me = normalizePhone(data.myPhone);
+    if (me.length < MIN_PHONE_DIGITS) return [];
+    const sql = await getSql();
+    try {
+      const rows = await sql<{ id: number; from_phone: string; from_name: string | null; created_at: string }>`
+        select id, from_phone, from_name, created_at
+        from phone_share_requests
+        where phone_match(to_phone, ${me}) and status = 'pending'
+        order by created_at desc
+        limit 20
+      `;
+      return rows.map((r) => ({
+        id: r.id,
+        fromPhone: r.from_phone,
+        fromName: r.from_name || "Someone",
+        createdAt: r.created_at,
+      }));
+    } catch {
+      return [];
+    }
+  });
+
+
 
 

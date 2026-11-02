@@ -61,3 +61,15 @@ export function phonesMatch(a: string, b: string): boolean {
   if (n < MIN_PHONE_DIGITS) return false;
   return x.slice(-n) === y.slice(-n);
 }
+
+/**
+ * Mask a phone number for privacy when the contact is unknown / not approved.
+ * e.g., '+972 52-802-4272' -> '+972 52 ••• ••72'
+ */
+export function maskPhone(raw: string): string {
+  const norm = normalizePhone(raw);
+  if (norm.length <= 4) return "••••";
+  const tail = norm.slice(-2);
+  const prefix = norm.startsWith("972") ? "+972 " + norm.slice(3, 5) : norm.slice(0, 3);
+  return `${prefix} ••• ••${tail}`;
+}

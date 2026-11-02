@@ -1,5 +1,5 @@
 import { Capacitor } from "@capacitor/core";
-import { normalizePhone } from "./phone";
+import { normalizePhone, phonesMatch, maskPhone } from "./phone";
 
 export type PhoneContact = {
   name: string;
@@ -439,3 +439,59 @@ export function rememberContact(contact: PhoneContact): void {
 export function openOutbound(href: string): void {
   window.location.href = href;
 }
+
+const KNOWN_PHONES_KEY = "kiss_known_phones_v1";
+
+/**
+ * Check if a phone number matches any contact stored in recent contacts or device contacts cache.
+ */
+export function isKnownContact(targetPhone?: string): boolean {
+  if (!targetPhone) return false;
+  const targetNorm = normalizePhone(targetPhone);
+  if (!targetNorm) return false;
+
+  // 1. Check local recents
+  const recents = loadRecents();
+  if (recents.some((c) => c.tel && phonesMatch(c.tel, targetNorm))) {
+    return true;
+  }
+
+  // 2. Check full cached contacts if present in localStorage
+  if (typeof window !== "undefined") {
+    try {
+      const cached = window.localStorage.getItem(KNOWN_PHONES_KEY);
+      if (cached) {
+        const list = JSON.parse(cached) as string[];
+        if (Array.isArray(list) && list.some((p) => phonesMatch(p, targetNorm))) {
+          return true;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Remember phone numbers as known/contacts (called when contacts are loaded or user sends a kiss)
+ */
+export function markPhoneAsKnown(tel: string): void {
+  if (typeof window === "undefined" || !tel) return;
+  const norm = normalizePhone(tel);
+  if (!norm) return;
+  try {
+    const raw = window.localStorage.getItem(KNOWN_PHONES_KEY);
+    const list: string[] = raw ? JSON.parse(raw) : [];
+    if (!list.some((p) => phonesMatch(p, norm))) {
+      list.push(norm);
+      window.localStorage.setItem(KNOWN_PHONES_KEY, JSON.stringify(list.slice(-500)));
+    }
+  } catch {
+    /* quota */
+  }
+}
+
+export { maskPhone };
+
