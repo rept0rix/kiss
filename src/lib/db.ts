@@ -111,7 +111,11 @@ function createNeonSql(): Promise<Sql> {
     types.setTypeParser(OID_INT8, Number);
     types.setTypeParser(OID_DATE, identity);
     types.setTypeParser(OID_INTERVAL, identity);
-    const pool = new Pool({ connectionString: databaseUrl });
+    const isLocal = databaseUrl?.includes("localhost") || databaseUrl?.includes("127.0.0.1");
+    const pool = new Pool({
+      connectionString: databaseUrl,
+      ssl: isLocal ? false : { rejectUnauthorized: false },
+    });
     console.log(`[db] backend: neon (${dbLabel})`);
     return toSql(async <T>(text: string, params: unknown[]) => {
       const res = await pool.query(text, params);

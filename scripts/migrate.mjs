@@ -42,8 +42,22 @@ async function main() {
     return;
   }
 
-  const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
-  const client = await pool.connect();
+  const isLocal = databaseUrl.includes("localhost") || databaseUrl.includes("127.0.0.1");
+  const pool = new pg.Pool({
+    connectionString: databaseUrl,
+    max: 1,
+    ssl: isLocal ? false : { rejectUnauthorized: false },
+    connectionTimeoutMillis: 10000,
+  });
+  let client;
+  try {
+    client = await pool.connect();
+  } catch (connErr) {
+    console.warn("[migrate] could not connect to DATABASE_URL:", connErr?.message || connErr);
+    console.warn("[migrate] skipping deploy-time migration; runtime connection will retry.");
+    await pool.end().catch(() => {});
+    return;
+  }
   try {
     await client.query(
       "CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())",
