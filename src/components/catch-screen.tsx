@@ -16,11 +16,15 @@ export function CatchScreen({
   from,
   photo,
   first,
+  kicker,
+  subtitle,
   onCaught,
 }: {
   from: string;
   photo?: string | null;
   first?: boolean;
+  kicker?: string;
+  subtitle?: string;
   onCaught: () => void;
 }) {
   const [caught, setCaught] = useState(false);
@@ -90,9 +94,9 @@ export function CatchScreen({
           <Face name={who} photo={photo} />
           <LipsMark i={3} className="catch-stamp" />
         </span>
-        <p className="catch-kicker">{first ? "FIRST KISS" : "INCOMING"}</p>
+        <p className="catch-kicker">{kicker || (first ? "FIRST KISS" : "INCOMING")}</p>
         <h1 className="catch-who">{who.toUpperCase()}</h1>
-        <p className="catch-did">KISSED YOU</p>
+        <p className="catch-did">{subtitle || "KISSED YOU"}</p>
         {pass ? (
           <div className="catch-pass">
             <p className="catch-pass-label">Send it on</p>

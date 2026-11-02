@@ -16,6 +16,7 @@ import { SoundSettings } from "@/components/sound-settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PhoneGate } from "@/components/phone-gate";
+import { LipsMark } from "@/components/lips-mark";
 import { invalidateHome, invalidatePhoneInbox, useHome, usePhoneHome, usePhoneInbox, usePhoneStats } from "@/hooks/use-home";
 import { useKeyboardInset } from "@/hooks/use-keyboard";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -1384,27 +1385,59 @@ function NameGate({
   onReady: (name: string) => void;
 }) {
   const ready = draftName.trim().length >= 2;
+  const inputRef = useRef<HTMLInputElement>(null);
   useKeyboardInset(true);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 150);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
-    <div className="sheet-scrim">
-      <div className="sheet" role="dialog" aria-label="Your name">
-        <p className="font-display text-2xl">Full name</p>
-        <p className="mt-1 text-sm text-muted">This is how kisses find you.</p>
-        <Input
-          className="mt-4"
-          value={draftName}
-          onChange={(e) => onDraftName(e.target.value)}
-          placeholder="Full name"
-          autoComplete="name"
-        />
-        <Button
-          size="lg"
-          className="mt-4 w-full"
-          disabled={!ready}
-          onClick={() => onReady(draftName.trim())}
-        >
-          Confirm
-        </Button>
+    <div className="sheet-scrim gate-scrim" dir="ltr">
+      <div
+        className="sheet relative max-h-[90dvh] !max-w-md w-full overflow-hidden flex flex-col p-6 rounded-3xl bg-[#0f0f12]/95 border border-white/10 text-white shadow-[0_25px_60px_-15px_rgba(255,45,85,0.3)] backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-200"
+        role="dialog"
+        aria-label="Your name"
+      >
+        <div className="flex flex-col items-center text-center">
+          <div className="w-16 h-16 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center mb-4 shadow-[0_0_20px_rgba(255,45,85,0.25)]">
+            <LipsMark className="w-9 h-9 text-rose-500 animate-pulse" />
+          </div>
+          <h2 className="font-display text-2xl tracking-wider uppercase text-white mb-1.5">
+            Full name
+          </h2>
+          <p className="text-xs text-white/60 mb-6 max-w-xs leading-relaxed">
+            This is how your friends and kisses find you.
+          </p>
+          <div className="w-full mb-4">
+            <input
+              ref={inputRef}
+              type="text"
+              autoFocus
+              className="w-full h-13 bg-white/[0.06] border border-white/10 focus:border-rose-500/60 focus:ring-1 focus:ring-rose-500/60 rounded-2xl px-4 text-base text-center font-medium tracking-wide text-white placeholder-white/30 focus:outline-none transition-all"
+              value={draftName}
+              onChange={(e) => onDraftName(e.target.value)}
+              placeholder="Your name"
+              autoComplete="name"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && ready) {
+                  onReady(draftName.trim());
+                }
+              }}
+            />
+          </div>
+          <Button
+            size="lg"
+            className="w-full h-13 rounded-2xl bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 font-display text-base tracking-wider uppercase shadow-lg shadow-rose-500/25 text-white transition-all active:scale-[0.98]"
+            disabled={!ready}
+            onClick={() => onReady(draftName.trim())}
+          >
+            Confirm
+          </Button>
+        </div>
       </div>
     </div>
   );

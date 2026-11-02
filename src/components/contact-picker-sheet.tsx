@@ -5,26 +5,37 @@ import {
   formatPhone,
   nameHue,
   openContactsSettings,
+  openWhatsApp,
   pickFromPhone,
   requestContactsPermission,
+  smsHref,
   type ContactPermissionStatus,
   type PhoneContact,
 } from "@/lib/contacts";
-import { Search, ShieldAlert, Sparkles, Smartphone, Users, X } from "lucide-react";
+import { batchCheckContacts, type MatchedContact } from "@/lib/kisses/server";
+import { publicCatchUrl } from "@/lib/share";
+import { MessageCircle, Search, ShieldAlert, Sparkles, Smartphone, Users, X } from "lucide-react";
 import { Button } from "./ui/button";
 
 export function ContactPickerSheet({
   open,
+  myPhone,
+  myName = "Someone",
   onClose,
   onSelect,
 }: {
   open: boolean;
+  myPhone?: string;
+  myName?: string;
   onClose: () => void;
   onSelect: (contact: PhoneContact) => void;
 }) {
   const [permission, setPermission] = useState<ContactPermissionStatus>("prompt");
   const [contacts, setContacts] = useState<PhoneContact[]>([]);
+  const [appMatches, setAppMatches] = useState<Map<string, MatchedContact>>(new Map());
   const [loading, setLoading] = useState(false);
+  const [checkingApp, setCheckingApp] = useState(false);
+  const [activeTab, setActiveTab] = useState<"all" | "onApp" | "invite">("all");
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -59,6 +70,31 @@ export function ContactPickerSheet({
     try {
       const list = await fetchAllPhoneContacts();
       setContacts(list);
+
+      // Check which contacts already use SendKiss
+      if (list.length > 0) {
+        setCheckingApp(true);
+        void batchCheckContacts({
+          data: {
+            phones: list.map((c) => c.tel),
+            myPhone,
+          },
+        })
+          .then((matched) => {
+            const map = new Map<string, MatchedContact>();
+            for (const item of matched) {
+              const tail = item.originalPhone.replace(/\D/g, "").slice(-8);
+              if (tail) map.set(tail, item);
+            }
+            setAppMatches(map);
+          })
+          .catch((err) => {
+            console.warn("Batch check error:", err);
+          })
+          .finally(() => {
+            setCheckingApp(false);
+          });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load contacts");
     } finally {
@@ -100,19 +136,45 @@ export function ContactPickerSheet({
     }
   }
 
+  const { onAppContacts, inviteContacts, totalOnApp } = useMemo(() => {
+    const onApp: PhoneContact[] = [];
+    const toInvite: PhoneContact[] = [];
+
+    for (const c of contacts) {
+      const tail = c.tel.replace(/\D/g, "").slice(-8);
+      const isRegistered = appMatches.get(tail)?.isOnSendKiss;
+      if (isRegistered) {
+        onApp.push(c);
+      } else {
+        toInvite.push(c);
+      }
+    }
+
+    return { onAppContacts: onApp, inviteContacts: toInvite, totalOnApp: onApp.length };
+  }, [contacts, appMatches]);
+
   const filtered = useMemo(() => {
+    let source = contacts;
+    if (activeTab === "onApp") source = onAppContacts;
+    else if (activeTab === "invite") source = inviteContacts;
+
     const q = query.trim().toLowerCase();
     const digits = q.replace(/\D/g, "");
-    if (!q) return contacts;
-    return contacts.filter((c) => {
+    if (!q) return source;
+    return source.filter((c) => {
       const matchName = c.name.toLowerCase().includes(q);
       const cDigits = c.tel.replace(/\D/g, "");
       const matchTel = digits.length > 0 && cDigits.includes(digits);
       return matchName || matchTel;
     });
-  }, [contacts, query]);
+  }, [contacts, onAppContacts, inviteContacts, activeTab, query]);
 
   if (!open) return null;
+
+  function inviteViaWhatsApp(c: PhoneContact) {
+    const url = publicCatchUrl(myName, c.tel);
+    openWhatsApp(c.tel, `Come get a kiss from me on SendKiss 💋\n${url}`);
+  }
 
   return (
     <div className="sheet-scrim" onClick={onClose}>
@@ -120,7 +182,7 @@ export function ContactPickerSheet({
         className="sheet sheet-tall flex flex-col"
         role="dialog"
         aria-label="Select Contact"
-        style={{ maxHeight: "min(38rem, 88dvh)" }}
+        style={{ maxHeight: "min(40rem, 90dvh)" }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -146,7 +208,7 @@ export function ContactPickerSheet({
             <p className="text-sm text-neutral-400 mb-6 max-w-xs leading-relaxed">
               {permission === "denied"
                 ? "Contacts access is disabled. Enable it in your phone settings or use the system picker directly."
-                : "Allow KISS to access your contacts so you can easily pick friends and blow kisses. Your contacts stay private on your device."}
+                : "Allow SendKiss to access your contacts to see who is already here and blow them kisses. Your contacts remain safe and private."}
             </p>
 
             <div className="w-full flex flex-col gap-2.5 max-w-xs">
@@ -183,14 +245,47 @@ export function ContactPickerSheet({
           </div>
         ) : (
           <div className="flex-1 flex flex-col min-h-0 pt-3">
+            {/* Filter Tabs */}
+            <div className="flex items-center gap-1.5 p-1 bg-white/5 rounded-2xl mb-2.5">
+              <button
+                type="button"
+                onClick={() => setActiveTab("all")}
+                className={`flex-1 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                  activeTab === "all" ? "bg-white/15 text-white shadow" : "text-neutral-400 hover:text-white"
+                }`}
+              >
+                All ({contacts.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("onApp")}
+                className={`flex-1 py-1.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                  activeTab === "onApp"
+                    ? "bg-rose-500 text-white shadow shadow-rose-500/30"
+                    : "text-rose-400 hover:text-rose-300"
+                }`}
+              >
+                <Sparkles size={12} />
+                <span>On SendKiss ({totalOnApp})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("invite")}
+                className={`flex-1 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                  activeTab === "invite" ? "bg-white/15 text-white shadow" : "text-neutral-400 hover:text-white"
+                }`}
+              >
+                Invite ({inviteContacts.length})
+              </button>
+            </div>
+
             {/* Search Bar & Quick System Picker */}
             <div className="flex items-center gap-2 mb-3">
               <div className="relative flex-1">
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
                 <input
                   type="text"
-                  autoFocus
-                  placeholder="Search by name or number…"
+                  placeholder="Search name or number…"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   className="w-full h-10 pl-9 pr-8 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-[#FF2E63]"
@@ -226,7 +321,7 @@ export function ContactPickerSheet({
               <div className="flex-1 flex flex-col items-center justify-center py-10 text-center text-neutral-400">
                 <p className="text-sm font-medium text-white mb-1">No contacts found</p>
                 <p className="text-xs text-neutral-500 mb-4">
-                  {query ? "Try a different name or number" : "No contacts available on this device"}
+                  {query ? "Try a different name or number" : "No contacts available in this view"}
                 </p>
                 <Button
                   size="sm"
@@ -240,48 +335,94 @@ export function ContactPickerSheet({
             ) : (
               <div className="flex-1 overflow-y-auto divide-y divide-white/5 pr-1">
                 {filtered.map((c, i) => {
+                  const tail = c.tel.replace(/\D/g, "").slice(-8);
+                  const appMatch = appMatches.get(tail);
+                  const isRegistered = Boolean(appMatch?.isOnSendKiss);
                   const hue = nameHue(c.name);
                   const initial = (c.name.trim()[0] || "?").toUpperCase();
                   const formatted = formatPhone(c.tel).display;
+
                   return (
-                    <button
+                    <div
                       key={`${c.tel}-${i}`}
-                      type="button"
-                      onClick={() => {
-                        onSelect(c);
-                        onClose();
-                      }}
-                      className="w-full py-2.5 px-2 flex items-center gap-3 text-left hover:bg-white/5 rounded-xl transition-colors active:scale-[0.99]"
+                      className={`w-full py-2.5 px-2 flex items-center justify-between gap-3 rounded-xl transition-colors ${
+                        isRegistered ? "bg-rose-500/10 border border-rose-500/20" : "hover:bg-white/5"
+                      }`}
                     >
-                      {/* Avatar */}
-                      {c.photo ? (
-                        <img
-                          src={c.photo}
-                          alt=""
-                          className="size-10 rounded-full object-cover shrink-0 border border-white/10"
-                        />
-                      ) : (
-                        <div
-                          className="size-10 rounded-full flex items-center justify-center font-display text-sm text-white shrink-0 border border-white/10"
-                          style={{
-                            background: `hsl(${hue} 65% 28%)`,
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onSelect(c);
+                          onClose();
+                        }}
+                        className="flex-1 min-w-0 flex items-center gap-3 text-left"
+                      >
+                        {/* Avatar */}
+                        {c.photo || appMatch?.photo ? (
+                          <img
+                            src={c.photo || appMatch?.photo || ""}
+                            alt=""
+                            className="size-10 rounded-full object-cover shrink-0 border border-white/10"
+                          />
+                        ) : (
+                          <div
+                            className="size-10 rounded-full flex items-center justify-center font-display text-sm text-white shrink-0 border border-white/10"
+                            style={{
+                              background: isRegistered
+                                ? "linear-gradient(135deg, #e11d2e, #ff2a4d)"
+                                : `hsl(${hue} 65% 28%)`,
+                            }}
+                          >
+                            {initial}
+                          </div>
+                        )}
+
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-sm font-medium text-white truncate">{c.name}</p>
+                            {isRegistered && (
+                              <span className="text-[10px] font-display uppercase tracking-wider text-rose-400 bg-rose-500/20 px-1.5 py-0.5 rounded-md shrink-0">
+                                On SendKiss
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-neutral-400 truncate font-mono">{formatted}</p>
+                        </div>
+                      </button>
+
+                      {/* Action buttons */}
+                      {isRegistered ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onSelect(c);
+                            onClose();
                           }}
+                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white font-display text-xs tracking-wider uppercase shadow-md shadow-rose-500/30 shrink-0 transition-transform active:scale-95"
                         >
-                          {initial}
+                          Kiss 💋
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => inviteViaWhatsApp(c)}
+                            className="p-2 rounded-xl bg-[#25d366]/15 hover:bg-[#25d366]/25 text-[#25d366] transition-colors"
+                            title="Invite via WhatsApp"
+                          >
+                            <MessageCircle size={15} />
+                          </button>
+                          <a
+                            href={smsHref(c.tel, `Come get a kiss from me on SendKiss 💋\n${publicCatchUrl(myName, c.tel)}`)}
+                            className="p-2 rounded-xl bg-sky-500/15 hover:bg-sky-500/25 text-sky-400 transition-colors"
+                            title="Invite via SMS"
+                          >
+                            <Smartphone size={15} />
+                          </a>
                         </div>
                       )}
-
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-white truncate">{c.name}</p>
-                        <p className="text-xs text-neutral-400 truncate font-mono">{formatted}</p>
-                      </div>
-
-                      {/* Kiss Badge */}
-                      <span className="text-xs text-[#FF2E63] font-display uppercase tracking-wider px-2 py-1 rounded-lg bg-[#FF2E63]/10 shrink-0">
-                        Select
-                      </span>
-                    </button>
+                    </div>
                   );
                 })}
               </div>

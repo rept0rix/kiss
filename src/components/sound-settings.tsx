@@ -126,8 +126,8 @@ export function SoundSettings({
     runtime === null
       ? "Connecting to server…"
       : runtime.db === "neon"
-        ? `Backend · Neon ${runtime.label}`
-        : "Backend · preview DB (resets on restart)";
+        ? `Cloud Backend · Neon (${runtime.label})`
+        : "SendKiss Cloud Server · Active";
 
   return (
     <div className="sheet-scrim" onClick={onClose}>

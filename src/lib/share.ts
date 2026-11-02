@@ -32,6 +32,13 @@ export function shortCatchUrl(code: string): string | undefined {
   return `${origin}/k/${code}`;
 }
 
+export function publicSocialCatchUrl(from: string, platform: string, handle: string): string {
+  const origin = publicOrigin();
+  const who = encodeURIComponent(cleanName(from));
+  const cleanHandle = encodeURIComponent(handle.replace(/^@/, ""));
+  return `${origin}/k/${who}?social=${encodeURIComponent(platform)}&handle=${cleanHandle}`;
+}
+
 export const PRODUCTION_ORIGIN = "https://app.sendkiss.online";
 
 export function publicOrigin(): string {

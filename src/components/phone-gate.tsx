@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import {
   COUNTRIES,
   DEFAULT_COUNTRY,
@@ -55,6 +55,15 @@ export function PhoneGate({
   const [searchQuery, setSearchQuery] = useState("");
   const phoneInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    if (!isPickerOpen) {
+      const t = setTimeout(() => {
+        phoneInputRef.current?.focus();
+      }, 150);
+      return () => clearTimeout(t);
+    }
+  }, [isPickerOpen]);
+
   // Validate current number
   const validation = useMemo(() => {
     return validatePhoneForCountry(selectedCountry, localNumber);
@@ -102,7 +111,7 @@ export function PhoneGate({
   };
 
   return (
-    <div className="sheet-scrim flex items-center justify-center p-4" dir="ltr">
+    <div className="sheet-scrim gate-scrim flex items-center justify-center p-4" dir="ltr">
       <div
         className="sheet relative max-h-[90dvh] !max-w-md w-full overflow-hidden flex flex-col p-6 rounded-3xl bg-[#0f0f12]/95 border border-white/10 text-white shadow-[0_25px_60px_-15px_rgba(255,45,85,0.3)] backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-200"
         role="dialog"
@@ -229,6 +238,7 @@ export function PhoneGate({
                   type="tel"
                   inputMode="tel"
                   autoComplete="tel"
+                  autoFocus
                   className={`w-full h-13 bg-white/[0.06] border rounded-2xl px-4 text-base font-mono tracking-wide text-white placeholder-white/30 focus:outline-none transition-all ${
                     validation.isValid
                       ? "border-emerald-500/50 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
@@ -246,7 +256,6 @@ export function PhoneGate({
                       handleConfirm();
                     }
                   }}
-                  autoFocus
                 />
               </div>
             </div>

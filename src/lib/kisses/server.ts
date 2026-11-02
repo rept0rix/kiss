@@ -1227,6 +1227,218 @@ export const searchDirectory = createServerFn({ method: "POST" })
     return out.slice(0, 50);
   });
 
+export type MatchedContact = {
+  originalPhone: string;
+  matchedPhone?: string;
+  name?: string;
+  photo?: string | null;
+  isOnSendKiss: boolean;
+};
+
+export const batchCheckContacts = createServerFn({ method: "POST" })
+  .validator((data: { phones: string[]; myPhone?: string }) => data)
+  .handler(async ({ data: { phones, myPhone } }): Promise<MatchedContact[]> => {
+    const sql = await getSql();
+    if (!phones || phones.length === 0) return [];
+
+    const cleanPhones = phones
+      .map((p) => ({
+        original: p,
+        clean: normalizePhone(p),
+        tail: p.replace(/\D/g, "").slice(-8),
+      }))
+      .filter((x) => x.tail.length >= 4);
+
+    if (cleanPhones.length === 0) return [];
+
+    let knownRows: Array<{ phone: string; display_name: string; photo: string | null }> = [];
+    try {
+      knownRows = await sql<{ phone: string; display_name: string; photo: string | null }>`
+        select pb.phone, pb.display_name, coalesce(pb.photo, pp.photo) as photo
+        from phone_book pb
+        left join phone_photos pp on pp.phone = pb.phone
+      `;
+    } catch {
+      knownRows = [];
+    }
+
+    const myTail = myPhone ? myPhone.replace(/\D/g, "").slice(-8) : "";
+
+    return cleanPhones.map((cp) => {
+      if (myTail && cp.tail === myTail) {
+        return { originalPhone: cp.original, isOnSendKiss: false };
+      }
+      const match = knownRows.find((kr) => {
+        const krTail = kr.phone.replace(/\D/g, "").slice(-8);
+        return krTail && krTail === cp.tail;
+      });
+      if (match) {
+        return {
+          originalPhone: cp.original,
+          matchedPhone: match.phone,
+          name: match.display_name,
+          photo: match.photo,
+          isOnSendKiss: true,
+        };
+      }
+      return {
+        originalPhone: cp.original,
+        isOnSendKiss: false,
+      };
+    });
+  });
+
+export const sendSocialKiss = createServerFn({ method: "POST" })
+  .validator((data: {
+    fromPhone: string;
+    fromName: string;
+    platform: string;
+    handle: string;
+    count?: number;
+    kind?: string;
+  }) => data)
+  .handler(async ({ data }) => {
+    const sql = await getSql();
+    const fromName = data.fromName.trim().slice(0, 32) || "Someone";
+    const n = Math.min(69, Math.max(1, Math.floor(data.count ?? 1)));
+    const kind = isKissKind(data.kind ?? "classic") ? (data.kind ?? "classic") : "classic";
+    const platform = data.platform.toLowerCase().trim();
+    const handle = data.handle.toLowerCase().replace(/^@/, "").trim();
+
+    if (!handle) throw new Error("Handle is required");
+
+    const from = await resolvePhoneIdentity(sql, data.fromPhone);
+    const targetKey = `${platform}:${handle}`;
+
+    let claims: Array<{ claimed_phone: string; claimed_name: string }> = [];
+    try {
+      claims = await sql<{ claimed_phone: string; claimed_name: string }>`
+        select claimed_phone, claimed_name from social_claims
+        where platform = ${platform} and handle = ${handle}
+        limit 1
+      `;
+    } catch {
+      claims = [];
+    }
+
+    let destinationPhone = targetKey;
+    let isClaimed = false;
+    let recipientName = `@${handle}`;
+
+    if (claims.length > 0 && claims[0]?.claimed_phone) {
+      destinationPhone = claims[0].claimed_phone;
+      isClaimed = true;
+      recipientName = claims[0].claimed_name || `@${handle}`;
+    }
+
+    const inserted = await sql<{ id: number }>`
+      insert into phone_kisses (from_phone, from_name, to_phone, kind, n)
+      values (${from.phone}, ${fromName}, ${destinationPhone}, ${kind}, ${n})
+      returning id
+    `;
+    const id = Number(inserted[0]?.id);
+    const origin = "https://app.sendkiss.online";
+
+    return {
+      id,
+      platform,
+      handle,
+      isClaimed,
+      recipientName,
+      claimUrl: `${origin}/k/${encodeURIComponent(fromName)}?social=${platform}&handle=${encodeURIComponent(handle)}`,
+      shareText: `💋 ${fromName} blew you a kiss on SendKiss for @${handle}! Catch it here: ${origin}/k/${encodeURIComponent(fromName)}?social=${platform}&handle=${encodeURIComponent(handle)}`,
+    };
+  });
+
+export const claimSocialHandle = createServerFn({ method: "POST" })
+  .validator((data: { phone: string; name: string; platform: string; handle: string }) => data)
+  .handler(async ({ data }) => {
+    const sql = await getSql();
+    const phone = normalizePhone(data.phone);
+    const platform = data.platform.toLowerCase().trim();
+    const handle = data.handle.toLowerCase().replace(/^@/, "").trim();
+    const name = data.name.trim().slice(0, 32);
+
+    if (!handle || phone.length < MIN_PHONE_DIGITS) throw new Error("Invalid phone or handle");
+
+    try {
+      await sql`
+        insert into social_claims (platform, handle, claimed_phone, claimed_name, claimed_at)
+        values (${platform}, ${handle}, ${phone}, ${name}, now())
+        on conflict (platform, handle) do update set
+          claimed_phone = ${phone},
+          claimed_name = ${name},
+          claimed_at = now()
+      `;
+    } catch {
+      /* ignore if table not created yet */
+    }
+
+    const targetKey = `${platform}:${handle}`;
+    let transferred = 0;
+    try {
+      const res = await sql<{ count: number }>`
+        with updated as (
+          update phone_kisses
+          set to_phone = ${phone}
+          where to_phone = ${targetKey}
+          returning id
+        )
+        select count(*)::int as count from updated
+      `;
+      transferred = Number(res[0]?.count ?? 0);
+    } catch {
+      transferred = 0;
+    }
+
+    return {
+      ok: true,
+      claimedCount: transferred,
+    };
+  });
+
+export const sendStrangerKiss = createServerFn({ method: "POST" })
+  .validator((data: { fromPhone: string; fromName: string; count?: number; kind?: string }) => data)
+  .handler(async ({ data }) => {
+    const sql = await getSql();
+    const fromName = data.fromName.trim().slice(0, 32) || "Someone";
+    const n = Math.min(69, Math.max(1, Math.floor(data.count ?? 1)));
+    const kind = isKissKind(data.kind ?? "classic") ? (data.kind ?? "classic") : "classic";
+    const from = await resolvePhoneIdentity(sql, data.fromPhone);
+
+    let candidates: Array<{ phone: string; display_name: string }> = [];
+    try {
+      candidates = await sql<{ phone: string; display_name: string }>`
+        select phone, display_name from phone_book
+        where not phone_match(phone, ${from.phone})
+        order by random()
+        limit 1
+      `;
+    } catch {
+      candidates = [];
+    }
+
+    let toPhone = "universe";
+    let toName = "A Stranger in the Universe";
+
+    if (candidates.length > 0 && candidates[0]?.phone) {
+      toPhone = candidates[0].phone;
+      toName = candidates[0].display_name || "Someone in the World";
+    }
+
+    const inserted = await sql<{ id: number }>`
+      insert into phone_kisses (from_phone, from_name, to_phone, kind, n)
+      values (${from.phone}, ${fromName}, ${toPhone}, ${kind}, ${n})
+      returning id
+    `;
+
+    return {
+      id: Number(inserted[0]?.id),
+      toName,
+      count: n,
+    };
+  });
+
 export const sendPhoneKiss = createServerFn({ method: "POST" })
   .validator((data: { fromPhone: string; fromName: string; toPhone: string; count?: number; kind?: string }) => data)
   .handler(async ({ data }) => {

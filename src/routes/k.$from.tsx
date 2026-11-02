@@ -1,15 +1,21 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { CatchScreen } from "@/components/catch-screen";
 import { isValidPhone, phoneDigits } from "@/lib/contacts";
-import { lookupFace, resolveShareLink } from "@/lib/kisses/server";
+import { claimSocialHandle, lookupFace, resolveShareLink } from "@/lib/kisses/server";
 import { loadMe, saveMe } from "@/lib/me";
 
-type Search = { p?: string };
+type Search = {
+  p?: string;
+  social?: string;
+  handle?: string;
+};
 
 export const Route = createFileRoute("/k/$from")({
   component: CatchRoute,
   validateSearch: (s: Record<string, unknown>): Search => ({
     p: typeof s.p === "string" ? s.p : undefined,
+    social: typeof s.social === "string" ? s.social : undefined,
+    handle: typeof s.handle === "string" ? s.handle : undefined,
   }),
   loader: async ({ params }) => {
     const raw = params.from || "";
@@ -47,23 +53,40 @@ export const Route = createFileRoute("/k/$from")({
 });
 
 function CatchRoute() {
-  const { p } = Route.useSearch();
+  const { p, social, handle } = Route.useSearch();
   const data = Route.useLoaderData();
   const navigate = useNavigate();
   const name = data.fromName || "Someone";
   const prev = loadMe();
   const linkedPhone = data.toPhone;
 
+  const kicker = handle
+    ? `${(social || "SOCIAL").toUpperCase()} KISS FOR @${handle.toUpperCase()}`
+    : undefined;
+
   return (
     <CatchScreen
       from={name}
       photo={data.fromPhoto}
       first={prev.received === 0}
+      kicker={kicker}
       onCaught={() => {
         const now = loadMe();
         const fromQuery = p && isValidPhone(p) ? phoneDigits(p) : "";
         const fromLink = linkedPhone && isValidPhone(linkedPhone) ? phoneDigits(linkedPhone) : "";
         const phone = fromQuery || fromLink || now.phone;
+
+        if (social && handle && phone) {
+          void claimSocialHandle({
+            data: {
+              phone,
+              name: now.name || name,
+              platform: social,
+              handle,
+            },
+          }).catch(() => undefined);
+        }
+
         saveMe({
           ...now,
           received: now.received + 1,
