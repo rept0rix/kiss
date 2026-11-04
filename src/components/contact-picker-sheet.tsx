@@ -1,22 +1,28 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   checkContactsPermission,
   fetchAllPhoneContacts,
   formatPhone,
+  isNativeApp,
+  loadCachedContacts,
+  loadRecents,
   markPhoneAsKnown,
   nameHue,
   openContactsSettings,
   openWhatsApp,
+  parseContactsFile,
   pickFromPhone,
   requestContactsPermission,
+  saveCachedContacts,
   smsHref,
   type ContactPermissionStatus,
   type PhoneContact,
 } from "@/lib/contacts";
-import { batchCheckContacts, type MatchedContact } from "@/lib/kisses/server";
+import { batchCheckContacts, searchDirectory, type MatchedContact } from "@/lib/kisses/server";
 import { publicCatchUrl } from "@/lib/share";
-import { MessageCircle, Search, ShieldAlert, Sparkles, Smartphone, Users, X } from "lucide-react";
+import { FolderUp, MessageCircle, Search, ShieldAlert, Sparkles, Smartphone, Users, X, Plus } from "lucide-react";
 import { Button } from "./ui/button";
+import { toast } from "sonner";
 
 export function ContactPickerSheet({
   open,
@@ -31,6 +37,7 @@ export function ContactPickerSheet({
   onClose: () => void;
   onSelect: (contact: PhoneContact) => void;
 }) {
+  const isNative = isNativeApp();
   const [permission, setPermission] = useState<ContactPermissionStatus>("prompt");
   const [contacts, setContacts] = useState<PhoneContact[]>([]);
   const [appMatches, setAppMatches] = useState<Map<string, MatchedContact>>(new Map());
@@ -39,24 +46,96 @@ export function ContactPickerSheet({
   const [activeTab, setActiveTab] = useState<"all" | "onApp" | "invite">("all");
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [directoryResults, setDirectoryResults] = useState<PhoneContact[]>([]);
+  const [searchingDirectory, setSearchingDirectory] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) {
       setQuery("");
       setError(null);
+      setDirectoryResults([]);
       return;
     }
     void init();
   }, [open]);
 
+  // When query changes, also search directory if query is entered and contacts list is empty or sparse
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setDirectoryResults([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setSearchingDirectory(true);
+      void searchDirectory({ data: { q, myPhone } })
+        .then((rows) => {
+          const formatted: PhoneContact[] = rows.map((r) => ({
+            name: r.displayName || "Someone",
+            tel: r.phone || "",
+            photo: r.photo || null,
+          }));
+          setDirectoryResults(formatted);
+        })
+        .catch(() => setDirectoryResults([]))
+        .finally(() => setSearchingDirectory(false));
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [query, myPhone]);
+
+  function checkAppMatches(list: PhoneContact[]) {
+    if (!list.length) return;
+    setCheckingApp(true);
+    void batchCheckContacts({
+      data: {
+        phones: list.map((c) => c.tel),
+        myPhone,
+      },
+    })
+      .then((matched) => {
+        const map = new Map<string, MatchedContact>();
+        for (const item of matched) {
+          const tail = item.originalPhone.replace(/\D/g, "").slice(-8);
+          if (tail) map.set(tail, item);
+        }
+        setAppMatches(map);
+      })
+      .catch((err) => {
+        console.warn("Batch check error:", err);
+      })
+      .finally(() => {
+        setCheckingApp(false);
+      });
+  }
+
   async function init() {
     setLoading(true);
     setError(null);
+
+    // 1. Immediately populate from local cache and recent contacts so user never sees a dead blank screen
+    const cached = loadCachedContacts();
+    const recents = loadRecents();
+    const initialMap = new Map<string, PhoneContact>();
+    for (const c of [...cached, ...recents]) {
+      const key = (c.tel || "").replace(/\D/g, "").slice(-8) || c.name.toLowerCase();
+      if (key && !initialMap.has(key)) initialMap.set(key, c);
+    }
+    const initialList = Array.from(initialMap.values());
+    if (initialList.length > 0) {
+      setContacts(initialList);
+      checkAppMatches(initialList);
+    }
+
     try {
-      const status = await checkContactsPermission();
-      setPermission(status);
-      if (status === "granted") {
-        await loadContacts();
+      if (isNative) {
+        const status = await checkContactsPermission();
+        setPermission(status);
+        if (status === "granted") {
+          await loadContacts();
+        }
       }
     } catch (err) {
       console.warn("Init contacts error:", err);
@@ -70,34 +149,12 @@ export function ContactPickerSheet({
     setError(null);
     try {
       const list = await fetchAllPhoneContacts();
-      setContacts(list);
-      for (const c of list) {
-        if (c.tel) markPhoneAsKnown(c.tel);
-      }
-
-      // Check which contacts already use SendKiss
       if (list.length > 0) {
-        setCheckingApp(true);
-        void batchCheckContacts({
-          data: {
-            phones: list.map((c) => c.tel),
-            myPhone,
-          },
-        })
-          .then((matched) => {
-            const map = new Map<string, MatchedContact>();
-            for (const item of matched) {
-              const tail = item.originalPhone.replace(/\D/g, "").slice(-8);
-              if (tail) map.set(tail, item);
-            }
-            setAppMatches(map);
-          })
-          .catch((err) => {
-            console.warn("Batch check error:", err);
-          })
-          .finally(() => {
-            setCheckingApp(false);
-          });
+        setContacts(list);
+        for (const c of list) {
+          if (c.tel) markPhoneAsKnown(c.tel);
+        }
+        checkAppMatches(list);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load contacts");
@@ -134,10 +191,49 @@ export function ContactPickerSheet({
       if (picked.length > 0 && picked[0]) {
         onSelect(picked[0]);
         onClose();
+      } else if (!isNative) {
+        // If web and picker returned nothing, offer VCF file picker
+        fileInputRef.current?.click();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "System picker failed");
     }
+  }
+
+  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLoading(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || "");
+      const parsed = parseContactsFile(text);
+      if (parsed.length > 0) {
+        saveCachedContacts(parsed);
+        for (const c of parsed) {
+          if (c.tel) markPhoneAsKnown(c.tel);
+        }
+        setContacts((prev) => {
+          const map = new Map<string, PhoneContact>();
+          for (const c of [...parsed, ...prev]) {
+            const key = (c.tel || "").replace(/\D/g, "").slice(-8) || c.name.toLowerCase();
+            if (key) map.set(key, c);
+          }
+          return Array.from(map.values());
+        });
+        toast.success(`Loaded ${parsed.length} contacts!`);
+        checkAppMatches(parsed);
+      } else {
+        toast.error("No valid contacts found in file.");
+      }
+      setLoading(false);
+    };
+    reader.onerror = () => {
+      toast.error("Error reading file");
+      setLoading(false);
+    };
+    reader.readAsText(file);
+    if (e.target) e.target.value = "";
   }
 
   const { onAppContacts, inviteContacts, totalOnApp } = useMemo(() => {
@@ -154,103 +250,209 @@ export function ContactPickerSheet({
       }
     }
 
-    return { onAppContacts: onApp, inviteContacts: toInvite, totalOnApp: onApp.length };
+    return {
+      onAppContacts: onApp,
+      inviteContacts: toInvite,
+      totalOnApp: onApp.length,
+    };
   }, [contacts, appMatches]);
 
   const filtered = useMemo(() => {
     let source = contacts;
     if (activeTab === "onApp") source = onAppContacts;
-    else if (activeTab === "invite") source = inviteContacts;
+    if (activeTab === "invite") source = inviteContacts;
 
+    if (!query.trim()) return source;
     const q = query.trim().toLowerCase();
-    const digits = q.replace(/\D/g, "");
-    if (!q) return source;
-    return source.filter((c) => {
-      const matchName = c.name.toLowerCase().includes(q);
-      const cDigits = c.tel.replace(/\D/g, "");
-      const matchTel = digits.length > 0 && cDigits.includes(digits);
-      return matchName || matchTel;
-    });
-  }, [contacts, onAppContacts, inviteContacts, activeTab, query]);
+    const directHits = source.filter(
+      (c) => c.name.toLowerCase().includes(q) || c.tel.replace(/\D/g, "").includes(q),
+    );
 
-  if (!open) return null;
+    // If query has results from search directory, append any that aren't already included
+    if (directoryResults.length > 0) {
+      const existingTails = new Set(directHits.map((c) => c.tel.replace(/\D/g, "").slice(-8)));
+      for (const d of directoryResults) {
+        const tail = d.tel.replace(/\D/g, "").slice(-8);
+        if (tail && !existingTails.has(tail)) {
+          directHits.push(d);
+        }
+      }
+    }
+
+    return directHits;
+  }, [contacts, onAppContacts, inviteContacts, activeTab, query, directoryResults]);
 
   function inviteViaWhatsApp(c: PhoneContact) {
     const url = publicCatchUrl(myName, c.tel);
     openWhatsApp(c.tel, `Come get a kiss from me on SendKiss 💋\n${url}`);
   }
 
+  if (!open) return null;
+
   return (
-    <div className="sheet-scrim" onClick={onClose}>
+    <div className="sheet-scrim" onClick={onClose} dir="ltr">
       <div
-        className="sheet sheet-tall flex flex-col"
+        className="sheet sheet-tall relative max-h-[88dvh] flex flex-col p-4 bg-[#0e0e12] border border-white/10 rounded-t-3xl sm:rounded-3xl shadow-2xl text-white"
         role="dialog"
-        aria-label="Select Contact"
-        style={{ maxHeight: "min(40rem, 90dvh)" }}
+        aria-label="Contacts"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="sheet-head pb-2 border-b border-white/10">
+        {/* Hidden VCF file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".vcf,.vcard,.csv,text/vcard,text/csv"
+          className="hidden"
+          onChange={handleFileUpload}
+        />
+
+        {/* Top Header */}
+        <div className="flex items-center justify-between pb-3 border-b border-white/10 shrink-0">
           <div className="flex items-center gap-2">
-            <Users size={20} className="text-[#FF2E63]" />
-            <p className="font-display text-xl tracking-tight">Select Contact</p>
+            <Users size={18} className="text-rose-500" />
+            <h2 className="font-display text-base tracking-wide uppercase text-white">Contacts</h2>
+            {checkingApp && <span className="text-[10px] text-rose-400 animate-pulse">Syncing…</span>}
           </div>
-          <button type="button" className="sheet-x" onClick={onClose} aria-label="Close">
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="text-xs px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-neutral-300 flex items-center gap-1 transition-colors"
+              title="Import .VCF file"
+            >
+              <Plus size={12} />
+              <span>.VCF</span>
+            </button>
+            <button
+              type="button"
+              className="text-xs text-neutral-400 hover:text-white px-2 py-1 rounded-md"
+              onClick={onClose}
+              aria-label="Close"
+            >
+              Close
+            </button>
+          </div>
         </div>
 
-        {/* Content depending on permission */}
-        {permission !== "granted" && contacts.length === 0 ? (
-          <div className="my-auto py-6 px-3 flex flex-col items-center text-center">
-            <div className="w-16 h-16 rounded-full bg-[#FF2E63]/10 flex items-center justify-center text-[#FF2E63] mb-4">
-              {permission === "denied" ? <ShieldAlert size={32} /> : <Users size={32} />}
-            </div>
-            <h3 className="font-display text-lg mb-2 text-white">
-              {permission === "denied" ? "Permission Needed" : "Find Your Friends"}
-            </h3>
-            <p className="text-sm text-neutral-400 mb-6 max-w-xs leading-relaxed">
-              {permission === "denied"
-                ? "Contacts access is disabled. Enable it in your phone settings or use the system picker directly."
-                : "Allow SendKiss to access your contacts to see who is already here and blow them kisses. Your contacts remain safe and private."}
-            </p>
-
-            <div className="w-full flex flex-col gap-2.5 max-w-xs">
-              {permission === "denied" ? (
-                <Button
-                  size="lg"
-                  className="w-full bg-[#FF2E63] hover:bg-[#FF2E63]/90 text-white font-medium"
-                  onClick={() => void openContactsSettings()}
-                >
-                  Open Phone Settings
-                </Button>
-              ) : (
-                <Button
-                  size="lg"
-                  disabled={loading}
-                  className="w-full bg-[#FF2E63] hover:bg-[#FF2E63]/90 text-white font-medium shadow-lg shadow-[#FF2E63]/25"
-                  onClick={() => void handleRequestPermission()}
-                >
-                  {loading ? "Checking…" : "Allow Contacts Access"}
-                </Button>
-              )}
-
-              <Button
-                size="lg"
-                variant="secondary"
-                className="w-full border-white/15 bg-white/5 hover:bg-white/10 text-white flex items-center justify-center gap-2"
-                onClick={() => void handleNativeSystemPick()}
+        {/* Search Bar - ALWAYS visible at top */}
+        <div className="flex items-center gap-2 my-3 shrink-0">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
+            <input
+              type="text"
+              placeholder="Search name or phone number…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-full h-10 pl-9 pr-8 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-rose-500"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white"
               >
-                <Smartphone size={16} />
-                <span>Open System Picker</span>
-              </Button>
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          {isNative ? (
+            <button
+              type="button"
+              onClick={() => void handleNativeSystemPick()}
+              className="h-10 px-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-medium text-neutral-300 flex items-center gap-1.5 shrink-0"
+              title="Apple System Picker"
+            >
+              <Smartphone size={14} />
+              <span>Picker</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="h-10 px-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-medium text-neutral-300 flex items-center gap-1.5 shrink-0"
+              title="Import Contacts"
+            >
+              <FolderUp size={14} />
+              <span>Import</span>
+            </button>
+          )}
+        </div>
+
+        {/* Empty state when NO contacts loaded yet */}
+        {contacts.length === 0 ? (
+          <div className="my-auto py-6 px-3 flex flex-col items-center text-center">
+            <div className="w-16 h-16 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-500 mb-4 shadow-[0_0_20px_rgba(255,45,85,0.25)]">
+              <Users size={32} />
             </div>
+
+            <h3 className="font-display text-lg mb-2 text-white">Find Your Friends</h3>
+
+            {isNative ? (
+              <>
+                <p className="text-xs text-neutral-400 mb-6 max-w-xs leading-relaxed">
+                  Allow SendKiss to access your contacts to see who is already here and blow them kisses.
+                </p>
+
+                <div className="w-full flex flex-col gap-2.5 max-w-xs">
+                  {permission === "denied" ? (
+                    <Button
+                      size="lg"
+                      className="w-full bg-rose-500 hover:bg-rose-600 text-white font-medium"
+                      onClick={() => void openContactsSettings()}
+                    >
+                      Open Phone Settings
+                    </Button>
+                  ) : (
+                    <Button
+                      size="lg"
+                      disabled={loading}
+                      className="w-full bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white font-medium shadow-lg shadow-rose-500/25"
+                      onClick={() => void handleRequestPermission()}
+                    >
+                      {loading ? "Checking…" : "Allow Contacts Access"}
+                    </Button>
+                  )}
+
+                  <Button
+                    size="lg"
+                    variant="secondary"
+                    className="w-full border-white/15 bg-white/5 hover:bg-white/10 text-white flex items-center justify-center gap-2"
+                    onClick={() => void handleNativeSystemPick()}
+                  >
+                    <Smartphone size={16} />
+                    <span>Open System Picker</span>
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-neutral-400 mb-6 max-w-xs leading-relaxed">
+                  Safari on iPhone keeps contacts private from web pages. You can import contacts instantly using a .VCF file, or install the native app for 1-tap sync.
+                </p>
+
+                <div className="w-full flex flex-col gap-2.5 max-w-xs">
+                  <Button
+                    size="lg"
+                    className="w-full bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white font-medium shadow-lg shadow-rose-500/25 flex items-center justify-center gap-2"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <FolderUp size={16} />
+                    <span>Import Contacts File (.vcf)</span>
+                  </Button>
+
+                  <p className="text-[11px] text-neutral-500 mt-2">
+                    Tip: In iPhone Contacts app, tap any contact or list &gt; "Export / Share" &gt; Save to Files, then pick it here!
+                  </p>
+                </div>
+              </>
+            )}
+
             {error && <p className="mt-3 text-xs text-rose-400">{error}</p>}
           </div>
         ) : (
-          <div className="flex-1 flex flex-col min-h-0 pt-3">
+          <div className="flex-1 flex flex-col min-h-0">
             {/* Filter Tabs */}
-            <div className="flex items-center gap-1.5 p-1 bg-white/5 rounded-2xl mb-2.5">
+            <div className="flex items-center gap-1.5 p-1 bg-white/5 rounded-2xl mb-2.5 shrink-0">
               <button
                 type="button"
                 onClick={() => setActiveTab("all")}
@@ -283,42 +485,10 @@ export function ContactPickerSheet({
               </button>
             </div>
 
-            {/* Search Bar & Quick System Picker */}
-            <div className="flex items-center gap-2 mb-3">
-              <div className="relative flex-1">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
-                <input
-                  type="text"
-                  placeholder="Search name or number…"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  className="w-full h-10 pl-9 pr-8 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-[#FF2E63]"
-                />
-                {query && (
-                  <button
-                    type="button"
-                    onClick={() => setQuery("")}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-white"
-                  >
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => void handleNativeSystemPick()}
-                className="h-10 px-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-medium text-neutral-300 flex items-center gap-1.5 shrink-0"
-                title="System Picker"
-              >
-                <Smartphone size={14} />
-                <span>Picker</span>
-              </button>
-            </div>
-
             {/* Contacts List */}
             {loading && contacts.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center py-12 text-neutral-400">
-                <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#FF2E63] border-t-transparent mb-3" />
+                <div className="animate-spin rounded-full h-8 w-8 border-2 border-rose-500 border-t-transparent mb-3" />
                 <p className="text-xs">Loading contacts…</p>
               </div>
             ) : filtered.length === 0 ? (
@@ -327,14 +497,26 @@ export function ContactPickerSheet({
                 <p className="text-xs text-neutral-500 mb-4">
                   {query ? "Try a different name or number" : "No contacts available in this view"}
                 </p>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="border-white/15 text-xs"
-                  onClick={() => void handleNativeSystemPick()}
-                >
-                  Try System Picker
-                </Button>
+                {isNative ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="border-white/15 text-xs"
+                    onClick={() => void handleNativeSystemPick()}
+                  >
+                    Try System Picker
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="border-white/15 text-xs flex items-center gap-1.5"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <FolderUp size={14} />
+                    <span>Upload .VCF Contacts</span>
+                  </Button>
+                )}
               </div>
             ) : (
               <div className="flex-1 overflow-y-auto divide-y divide-white/5 pr-1">

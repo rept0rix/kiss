@@ -2,8 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import {
   canPickContacts,
   fetchAllPhoneContacts,
+  isNativeApp,
+  loadCachedContacts,
+  parseContactsFile,
   pickFromPhone,
   requestContactsPermission,
+  saveCachedContacts,
   type PhoneContact,
 } from "@/lib/contacts";
 import { searchDirectory, sendPhoneKiss } from "@/lib/kisses/server";
@@ -49,37 +53,22 @@ export function ContactImport({
   if (!open) return null;
 
   function parseText(text: string): PhoneContact[] {
-    const out: PhoneContact[] = [];
-    if (/BEGIN:VCARD/i.test(text)) {
-      for (const card of text.split(/BEGIN:VCARD/i).slice(1)) {
-        const name = /^FN[^:]*:(.+)$/im.exec(card)?.[1]?.trim() ?? "";
-        const tel = /^TEL[^:]*:(.+)$/im.exec(card)?.[1]?.trim() ?? "";
-        if (tel) out.push({ name: name || tel, tel } as PhoneContact);
-      }
-      return out;
-    }
-    for (const line of text.split(/\n/)) {
-      const digits = line.replace(/\D/g, "");
-      if (digits.length < 7) continue;
-      const tel = /\+?[\d][\d\s().-]{5,}/.exec(line)?.[0]?.trim() ?? digits;
-      const name = line.replace(tel, "").replace(/[,;:\t]+/g, " ").trim();
-      out.push({ name: name || tel, tel } as PhoneContact);
-    }
-    return out;
+    return parseContactsFile(text);
   }
 
   async function doImport(given?: PhoneContact[]) {
     setBusy(true);
     setMessage(null);
     try {
-      if (!given) {
+      if (!given && isNativeApp()) {
         await requestContactsPermission();
       }
       const picked = given ?? (await fetchAllPhoneContacts());
       if (picked.length === 0) {
-        setMessage("No contacts found or permission not granted. Use Browse to pick directly.");
+        setMessage("No contacts found. Use Browse to pick directly or upload a .vcf file.");
         return;
       }
+      saveCachedContacts(picked);
       setContacts(picked);
       // Match against the directory
       const allHits: PublicPerson[] = [];

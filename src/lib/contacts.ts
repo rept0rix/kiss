@@ -216,8 +216,60 @@ export async function pickFromPhone(): Promise<PhoneContact[]> {
   return webPick();
 }
 
+export const CACHED_CONTACTS_KEY = "kiss_contacts_cached_v1";
+
+export function loadCachedContacts(): PhoneContact[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(CACHED_CONTACTS_KEY);
+    if (!raw) return [];
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCachedContacts(contacts: PhoneContact[]): void {
+  if (typeof window === "undefined" || !contacts?.length) return;
+  try {
+    const existing = loadCachedContacts();
+    const map = new Map<string, PhoneContact>();
+    for (const c of [...existing, ...contacts]) {
+      const key = (c.tel || "").replace(/\D/g, "").slice(-8) || c.name.toLowerCase();
+      if (key) map.set(key, c);
+    }
+    const combined = Array.from(map.values()).slice(0, 500);
+    window.localStorage.setItem(CACHED_CONTACTS_KEY, JSON.stringify(combined));
+  } catch {
+    /* ignore quota */
+  }
+}
+
+export function parseContactsFile(text: string): PhoneContact[] {
+  const out: PhoneContact[] = [];
+  if (/BEGIN:VCARD/i.test(text)) {
+    for (const card of text.split(/BEGIN:VCARD/i).slice(1)) {
+      const name = /^FN[^:]*:(.+)$/im.exec(card)?.[1]?.trim() ?? "";
+      const tel = /^TEL[^:]*:(.+)$/im.exec(card)?.[1]?.trim() ?? "";
+      if (tel) {
+        out.push({ name: name || tel, tel });
+      }
+    }
+    return out;
+  }
+  for (const line of text.split(/\n/)) {
+    const digits = line.replace(/\D/g, "");
+    if (digits.length < 7) continue;
+    const tel = /\+?[\d][\d\s().-]{5,}/.exec(line)?.[0]?.trim() ?? digits;
+    const name = line.replace(tel, "").replace(/[,;:\t]+/g, " ").trim();
+    out.push({ name: name || tel, tel });
+  }
+  return out;
+}
+
 export async function fetchAllPhoneContacts(): Promise<PhoneContact[]> {
-  // 1. Try custom KissContacts plugin if present
+  // 1. Try custom KissContacts plugin if present (iOS + Android)
   const plugin = await getKissContactsPlugin();
   if (plugin) {
     try {
@@ -232,10 +284,14 @@ export async function fetchAllPhoneContacts(): Promise<PhoneContact[]> {
               photo: c.photo || null,
             };
             rememberContact(contact);
+            markPhoneAsKnown(contact.tel);
             out.push(contact);
           }
         }
-        if (out.length > 0) return out;
+        if (out.length > 0) {
+          saveCachedContacts(out);
+          return out;
+        }
       }
     } catch (err) {
       console.warn("KissContacts.getContacts error:", err);
@@ -244,9 +300,18 @@ export async function fetchAllPhoneContacts(): Promise<PhoneContact[]> {
 
   // 2. Try Capgo get contacts
   const capgo = await capgoGetAll();
-  if (capgo !== null && capgo.length > 0) return capgo;
+  if (capgo !== null && capgo.length > 0) {
+    saveCachedContacts(capgo);
+    return capgo;
+  }
 
-  // 3. Fall back to picker
+  // 3. Try cached contacts
+  const cached = loadCachedContacts();
+  if (cached.length > 0) {
+    return cached;
+  }
+
+  // 4. Fall back to picker
   return pickFromPhone();
 }
 
