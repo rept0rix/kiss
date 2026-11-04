@@ -64,6 +64,13 @@ public class KissContactsPlugin: CAPPlugin, CAPBridgedPlugin, CNContactPickerDel
 
     @objc func getContacts(_ call: CAPPluginCall) {
         let status = CNContactStore.authorizationStatus(for: .contacts)
+        var isAuthorized = (status == .authorized)
+        if #available(iOS 18.0, *) {
+            if status == .limited {
+                isAuthorized = true
+            }
+        }
+
         if status == .notDetermined {
             contactStore.requestAccess(for: .contacts) { [weak self] granted, error in
                 DispatchQueue.main.async {
@@ -74,7 +81,7 @@ public class KissContactsPlugin: CAPPlugin, CAPBridgedPlugin, CNContactPickerDel
                     }
                 }
             }
-        } else if status == .authorized || status == .limited {
+        } else if isAuthorized {
             fetchAllContacts(call)
         } else {
             call.reject("Permission denied")
