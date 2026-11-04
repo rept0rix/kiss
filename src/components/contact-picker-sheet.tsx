@@ -115,6 +115,11 @@ export function ContactPickerSheet({
     setLoading(true);
     setError(null);
 
+    // Safety timeout: loading should never be stuck for more than 3 seconds
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+    }, 3000);
+
     // 1. Immediately populate from local cache and recent contacts so user never sees a dead blank screen
     const cached = loadCachedContacts();
     const recents = loadRecents();
@@ -140,6 +145,7 @@ export function ContactPickerSheet({
     } catch (err) {
       console.warn("Init contacts error:", err);
     } finally {
+      clearTimeout(safetyTimer);
       setLoading(false);
     }
   }
@@ -151,9 +157,6 @@ export function ContactPickerSheet({
       const list = await fetchAllPhoneContacts();
       if (list.length > 0) {
         setContacts(list);
-        for (const c of list) {
-          if (c.tel) markPhoneAsKnown(c.tel);
-        }
         checkAppMatches(list);
       }
     } catch (err) {
@@ -189,6 +192,7 @@ export function ContactPickerSheet({
     try {
       const picked = await pickFromPhone();
       if (picked.length > 0 && picked[0]) {
+        setContacts((prev) => [picked[0], ...prev.filter((p) => p.tel !== picked[0].tel)]);
         onSelect(picked[0]);
         onClose();
       } else if (!isNative) {
@@ -378,8 +382,8 @@ export function ContactPickerSheet({
           )}
         </div>
 
-        {/* Empty state when NO contacts loaded yet */}
-        {contacts.length === 0 ? (
+        {/* Empty state when NO contacts loaded yet and no search query */}
+        {contacts.length === 0 && !query.trim() && directoryResults.length === 0 ? (
           <div className="my-auto py-6 px-3 flex flex-col items-center text-center">
             <div className="w-16 h-16 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-500 mb-4 shadow-[0_0_20px_rgba(255,45,85,0.25)]">
               <Users size={32} />

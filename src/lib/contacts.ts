@@ -19,9 +19,18 @@ type ContactPickerNav = Navigator & {
 const RECENTS_KEY = "kiss-contacts-v1";
 
 export interface KissContactsPluginType {
-  pickContact(): Promise<{ name: string; tel: string; photo?: string | null }>;
+  pickContact(): Promise<{ name?: string; tel?: string; photo?: string | null }>;
   getContacts(): Promise<{ contacts: Array<{ name: string; tel: string; photo?: string | null }> }>;
+  checkPermissions?(): Promise<{ readContacts?: string }>;
+  requestPermissions?(): Promise<{ readContacts?: string }>;
   openSettings?(): Promise<void>;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
 }
 
 export function isNativeApp(): boolean {
@@ -40,11 +49,26 @@ export async function checkContactsPermission(): Promise<ContactPermissionStatus
   if (!isNativeApp()) {
     return "prompt";
   }
+
+  // 1. First check our native KissContacts plugin
+  try {
+    const plugin = await getKissContactsPlugin();
+    if (plugin?.checkPermissions) {
+      const res = await withTimeout(plugin.checkPermissions(), 2000, null);
+      if (res?.readContacts === "granted" || res?.readContacts === "limited") return "granted";
+      if (res?.readContacts === "denied") return "denied";
+      if (res?.readContacts === "prompt") return "prompt";
+    }
+  } catch {
+    /* fallback to capgo */
+  }
+
+  // 2. Fallback to Capgo
   try {
     const { CapacitorContacts } = await import("@capgo/capacitor-contacts");
-    const status = await CapacitorContacts.checkPermissions();
-    if (status.readContacts === "granted" || status.readContacts === "limited") return "granted";
-    if (status.readContacts === "denied") return "denied";
+    const status = await withTimeout(CapacitorContacts.checkPermissions(), 2000, null);
+    if (status?.readContacts === "granted" || status?.readContacts === "limited") return "granted";
+    if (status?.readContacts === "denied") return "denied";
     return "prompt";
   } catch {
     return "prompt";
@@ -53,18 +77,37 @@ export async function checkContactsPermission(): Promise<ContactPermissionStatus
 
 export async function requestContactsPermission(): Promise<boolean> {
   if (!isNativeApp()) return false;
+
+  // 1. First try our native KissContacts plugin
   try {
-    const { CapacitorContacts } = await import("@capgo/capacitor-contacts");
-    const req = await CapacitorContacts.requestPermissions({ permissions: ["readContacts"] });
-    if (req.readContacts === "granted" || req.readContacts === "limited") return true;
+    const plugin = await getKissContactsPlugin();
+    if (plugin?.requestPermissions) {
+      const res = await withTimeout(plugin.requestPermissions(), 6000, null);
+      if (res?.readContacts === "granted" || res?.readContacts === "limited") return true;
+      if (res?.readContacts === "denied") return false;
+    }
   } catch {
-    /* fallback to KissContacts */
+    /* fallback */
   }
 
+  // 2. Try Capgo request
+  try {
+    const { CapacitorContacts } = await import("@capgo/capacitor-contacts");
+    const req = await withTimeout(
+      CapacitorContacts.requestPermissions({ permissions: ["readContacts"] }),
+      6000,
+      null,
+    );
+    if (req?.readContacts === "granted" || req?.readContacts === "limited") return true;
+  } catch {
+    /* fallback to getContacts */
+  }
+
+  // 3. Last fallback: try calling getContacts() which triggers iOS system dialog if not determined
   try {
     const plugin = await getKissContactsPlugin();
     if (plugin?.getContacts) {
-      const res = await plugin.getContacts();
+      const res = await withTimeout(plugin.getContacts(), 6000, null);
       return Boolean(res?.contacts && res.contacts.length >= 0);
     }
   } catch {
@@ -76,15 +119,19 @@ export async function requestContactsPermission(): Promise<boolean> {
 export async function openContactsSettings(): Promise<void> {
   if (!isNativeApp()) return;
   try {
+    const plugin = await getKissContactsPlugin();
+    if (plugin?.openSettings) {
+      await plugin.openSettings();
+      return;
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
     const { CapacitorContacts } = await import("@capgo/capacitor-contacts");
     await CapacitorContacts.openSettings();
   } catch {
-    try {
-      const plugin = await getKissContactsPlugin();
-      if (plugin?.openSettings) await plugin.openSettings();
-    } catch {
-      /* ignore */
-    }
+    /* ignore */
   }
 }
 
@@ -189,11 +236,11 @@ async function webPick(): Promise<PhoneContact[]> {
 }
 
 export async function pickFromPhone(): Promise<PhoneContact[]> {
-  // 1. Try custom KissContacts plugin first on Android (launches native contact picker intent)
+  // 1. Try custom KissContacts plugin first (iOS + Android native contact picker sheet)
   const plugin = await getKissContactsPlugin();
-  if (plugin) {
+  if (plugin?.pickContact) {
     try {
-      const res = await plugin.pickContact();
+      const res = await withTimeout(plugin.pickContact(), 60000, null);
       if (res && res.tel) {
         const picked: PhoneContact = {
           name: res.name || "Someone",
@@ -201,15 +248,17 @@ export async function pickFromPhone(): Promise<PhoneContact[]> {
           photo: res.photo || null,
         };
         rememberContact(picked);
+        markPhoneAsKnown(picked.tel);
         return [picked];
       }
+      if (res) return []; // User cancelled
     } catch (err) {
       console.warn("KissContacts.pickContact error or dismissed:", err);
     }
   }
 
   // 2. Try Capgo native picker (iOS / platforms where implemented)
-  const capgo = await capgoPick();
+  const capgo = await withTimeout(capgoPick(), 60000, null);
   if (capgo !== null && capgo.length > 0) return capgo;
 
   // 3. Web contact picker fallback
@@ -271,25 +320,25 @@ export function parseContactsFile(text: string): PhoneContact[] {
 export async function fetchAllPhoneContacts(): Promise<PhoneContact[]> {
   // 1. Try custom KissContacts plugin if present (iOS + Android)
   const plugin = await getKissContactsPlugin();
-  if (plugin) {
+  if (plugin?.getContacts) {
     try {
-      const res = await plugin.getContacts();
+      const res = await withTimeout(plugin.getContacts(), 8000, null);
       if (res?.contacts && res.contacts.length > 0) {
         const out: PhoneContact[] = [];
+        const phones: string[] = [];
         for (const c of res.contacts) {
           if (c.tel) {
-            const contact: PhoneContact = {
+            out.push({
               name: c.name || "Someone",
               tel: c.tel,
               photo: c.photo || null,
-            };
-            rememberContact(contact);
-            markPhoneAsKnown(contact.tel);
-            out.push(contact);
+            });
+            phones.push(c.tel);
           }
         }
         if (out.length > 0) {
           saveCachedContacts(out);
+          markPhonesAsKnown(phones);
           return out;
         }
       }
@@ -299,9 +348,10 @@ export async function fetchAllPhoneContacts(): Promise<PhoneContact[]> {
   }
 
   // 2. Try Capgo get contacts
-  const capgo = await capgoGetAll();
+  const capgo = await withTimeout(capgoGetAll(), 8000, null);
   if (capgo !== null && capgo.length > 0) {
     saveCachedContacts(capgo);
+    markPhonesAsKnown(capgo.map((c) => c.tel));
     return capgo;
   }
 
@@ -311,8 +361,7 @@ export async function fetchAllPhoneContacts(): Promise<PhoneContact[]> {
     return cached;
   }
 
-  // 4. Fall back to picker
-  return pickFromPhone();
+  return [];
 }
 
 export function nameHue(name: string): number {
@@ -544,14 +593,25 @@ export function isKnownContact(targetPhone?: string): boolean {
  */
 export function markPhoneAsKnown(tel: string): void {
   if (typeof window === "undefined" || !tel) return;
-  const norm = normalizePhone(tel);
-  if (!norm) return;
+  markPhonesAsKnown([tel]);
+}
+
+export function markPhonesAsKnown(phones: string[]): void {
+  if (typeof window === "undefined" || !phones.length) return;
   try {
     const raw = window.localStorage.getItem(KNOWN_PHONES_KEY);
-    const list: string[] = raw ? JSON.parse(raw) : [];
-    if (!list.some((p) => phonesMatch(p, norm))) {
-      list.push(norm);
-      window.localStorage.setItem(KNOWN_PHONES_KEY, JSON.stringify(list.slice(-500)));
+    const existing = new Set<string>(raw ? JSON.parse(raw) : []);
+    let changed = false;
+    for (const tel of phones) {
+      const norm = normalizePhone(tel);
+      if (norm && !existing.has(norm)) {
+        existing.add(norm);
+        changed = true;
+      }
+    }
+    if (changed) {
+      const arr = Array.from(existing).slice(-1000);
+      window.localStorage.setItem(KNOWN_PHONES_KEY, JSON.stringify(arr));
     }
   } catch {
     /* quota */
