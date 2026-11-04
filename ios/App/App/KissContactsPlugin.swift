@@ -16,7 +16,6 @@ public class KissContactsPlugin: CAPPlugin, CAPBridgedPlugin, CNContactPickerDel
     ]
 
     private var pendingCall: CAPPluginCall?
-    private let contactStore = CNContactStore()
 
     // Helper: Safely resolve top-most presented view controller
     private func getTopViewController() -> UIViewController? {
@@ -46,7 +45,7 @@ public class KissContactsPlugin: CAPPlugin, CAPBridgedPlugin, CNContactPickerDel
         return name.isEmpty ? "Someone" : name
     }
 
-    // MARK: - Native Contact Picker (Zero Permission Prompt Needed)
+    // MARK: - Native Contact Picker (Zero Permission Prompt Needed by Apple)
     @objc func pickContact(_ call: CAPPluginCall) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
@@ -174,7 +173,8 @@ public class KissContactsPlugin: CAPPlugin, CAPBridgedPlugin, CNContactPickerDel
             return
         }
 
-        contactStore.requestAccess(for: .contacts) { granted, error in
+        let store = CNContactStore()
+        store.requestAccess(for: .contacts) { granted, error in
             DispatchQueue.main.async {
                 var result = JSObject()
                 result["readContacts"] = granted ? "granted" : "denied"
@@ -193,13 +193,14 @@ public class KissContactsPlugin: CAPPlugin, CAPBridgedPlugin, CNContactPickerDel
             }
         }
 
+        let store = CNContactStore()
         if status == .notDetermined {
-            contactStore.requestAccess(for: .contacts) { [weak self] granted, error in
+            store.requestAccess(for: .contacts) { [weak self] granted, error in
                 DispatchQueue.main.async {
                     if granted {
                         self?.fetchAllContacts(call)
                     } else {
-                        call.reject("Permission not granted")
+                        call.reject("Permission not granted: \(error?.localizedDescription ?? "denied")")
                     }
                 }
             }
@@ -213,7 +214,6 @@ public class KissContactsPlugin: CAPPlugin, CAPBridgedPlugin, CNContactPickerDel
     private func fetchAllContacts(_ call: CAPPluginCall) {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            // CRITICAL: Avoid CNContactNoteKey and DO NOT fetch heavy images in bulk
             let keys: [CNKeyDescriptor] = [
                 CNContactIdentifierKey as CNKeyDescriptor,
                 CNContactGivenNameKey as CNKeyDescriptor,
@@ -226,17 +226,26 @@ public class KissContactsPlugin: CAPPlugin, CAPBridgedPlugin, CNContactPickerDel
 
             var list: [JSObject] = []
             var count = 0
-            let maxContacts = 2500
+            let maxContacts = 3000
 
             do {
-                try self.contactStore.enumerateContacts(with: request) { contact, stop in
+                let freshStore = CNContactStore()
+                try freshStore.enumerateContacts(with: request) { contact, stop in
                     if count >= maxContacts {
                         stop.pointee = true
                         return
                     }
-                    guard let phone = contact.phoneNumbers.first?.value.stringValue.trimmingCharacters(in: .whitespacesAndNewlines), !phone.isEmpty else {
-                        return
+                    
+                    var phone = ""
+                    for p in contact.phoneNumbers {
+                        let s = p.value.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !s.isEmpty {
+                            phone = s
+                            break
+                        }
                     }
+                    if phone.isEmpty { return }
+                    
                     var item = JSObject()
                     let fullName = self.makeFullName(from: contact)
                     item["name"] = fullName

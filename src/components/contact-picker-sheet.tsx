@@ -384,8 +384,8 @@ export function ContactPickerSheet({
           )}
         </div>
 
-        {/* Empty state when NO contacts loaded yet and no search query */}
-        {contacts.length === 0 && !query.trim() && directoryResults.length === 0 ? (
+        {/* Permission Prompt screen ONLY when permission is undetermined ("prompt") and no search */}
+        {permission === "prompt" && contacts.length === 0 && !query.trim() && directoryResults.length === 0 ? (
           <div className="my-auto py-6 px-3 flex flex-col items-center text-center">
             <div className="w-16 h-16 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-500 mb-4 shadow-[0_0_20px_rgba(255,45,85,0.25)]">
               <Users size={32} />
@@ -400,24 +400,14 @@ export function ContactPickerSheet({
                 </p>
 
                 <div className="w-full flex flex-col gap-2.5 max-w-xs">
-                  {permission === "denied" ? (
-                    <Button
-                      size="lg"
-                      className="w-full bg-rose-500 hover:bg-rose-600 text-white font-medium"
-                      onClick={() => void openContactsSettings()}
-                    >
-                      Open Phone Settings
-                    </Button>
-                  ) : (
-                    <Button
-                      size="lg"
-                      disabled={loading}
-                      className="w-full bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white font-medium shadow-lg shadow-rose-500/25"
-                      onClick={() => void handleRequestPermission()}
-                    >
-                      {loading ? "Checking…" : "Allow Contacts Access"}
-                    </Button>
-                  )}
+                  <Button
+                    size="lg"
+                    disabled={loading}
+                    className="w-full bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white font-medium shadow-lg shadow-rose-500/25"
+                    onClick={() => void handleRequestPermission()}
+                  >
+                    {loading ? "Checking…" : "Allow Contacts Access"}
+                  </Button>
 
                   <Button
                     size="lg"
@@ -457,6 +447,20 @@ export function ContactPickerSheet({
           </div>
         ) : (
           <div className="flex-1 flex flex-col min-h-0">
+            {/* Permission Denied Banner */}
+            {permission === "denied" && (
+              <div className="mb-2.5 p-2 bg-rose-500/10 border border-rose-500/25 rounded-xl flex items-center justify-between text-xs text-rose-300">
+                <span>Contacts access is disabled in Settings</span>
+                <button
+                  type="button"
+                  onClick={() => void openContactsSettings()}
+                  className="font-semibold text-white underline ml-2"
+                >
+                  Settings
+                </button>
+              </div>
+            )}
+
             {/* Filter Tabs */}
             <div className="flex items-center gap-1.5 p-1 bg-white/5 rounded-2xl mb-2.5 shrink-0">
               <button
@@ -513,14 +517,27 @@ export function ContactPickerSheet({
                     : "Try a different name or number, or upload your contacts."}
                 </p>
                 {isNative ? (
-                  <Button
-                    size="sm"
-                    className="bg-rose-500 hover:bg-rose-600 text-white text-xs flex items-center justify-center gap-1.5 shadow-md shadow-rose-500/20"
-                    onClick={() => void handleNativeSystemPick()}
-                  >
-                    <Smartphone size={14} />
-                    <span>Pick from iPhone Contacts</span>
-                  </Button>
+                  <div className="flex flex-col gap-2 w-full max-w-xs">
+                    <Button
+                      size="sm"
+                      className="bg-rose-500 hover:bg-rose-600 text-white text-xs flex items-center justify-center gap-1.5 shadow-md shadow-rose-500/20"
+                      onClick={() => void handleNativeSystemPick()}
+                    >
+                      <Smartphone size={14} />
+                      <span>{query ? `Pick "${query}" from iPhone Contacts` : "Choose from iPhone Contacts"}</span>
+                    </Button>
+                    {!query && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="border-white/15 bg-white/5 hover:bg-white/10 text-neutral-300 text-xs flex items-center justify-center gap-1.5"
+                        onClick={() => void loadContacts()}
+                        disabled={loading}
+                      >
+                        <span>{loading ? "Syncing…" : "🔄 Sync Phone Contacts"}</span>
+                      </Button>
+                    )}
+                  </div>
                 ) : (
                   <Button
                     size="sm"

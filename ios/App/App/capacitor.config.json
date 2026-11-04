@@ -33,6 +33,7 @@
 		"HapticsPlugin",
 		"LocalNotificationsPlugin",
 		"PushNotificationsPlugin",
-		"CapacitorContactsPlugin"
+		"CapacitorContactsPlugin",
+		"KissContactsPlugin"
 	]
 }
