@@ -1033,6 +1033,13 @@ export const createShareLink = createServerFn({ method: "POST" })
             values (${code}, ${card})
             on conflict (code) do update set body = excluded.body
           `;
+          if (fromName) {
+            await sql`
+              insert into share_cards (code, body)
+              values (${'name:' + fromName.toLowerCase()}, ${card})
+              on conflict (code) do update set body = excluded.body
+            `.catch(() => undefined);
+          }
         } catch {
           /* share_cards may not exist yet */
         }
@@ -1070,28 +1077,69 @@ export const resolveShareLink = createServerFn({ method: "GET" })
 export const getShareCard = createServerFn({ method: "GET" })
   .validator((code: string) => code)
   .handler(async ({ data: raw }): Promise<string | null> => {
-    const code = raw.trim().toLowerCase().slice(0, 8);
-    if (!/^[a-z0-9]{4,8}$/.test(code)) return null;
+    const rawTrimmed = (raw || "").trim();
+    if (!rawTrimmed) return null;
     const sql = await getSql();
+
+    // 1. If 4-8 chars alphanumeric, check exact share_cards / share_links code
+    const code = rawTrimmed.toLowerCase().slice(0, 8);
+    if (/^[a-z0-9]{4,8}$/.test(code)) {
+      try {
+        const stored = await sql<{ body: string }>`
+          select body from share_cards where code = ${code} limit 1
+        `;
+        if (stored[0]?.body?.startsWith("data:image")) return stored[0].body;
+      } catch {
+        /* table missing */
+      }
+      try {
+        const rows = await sql<{ card: string | null; from_phone: string | null; from_name: string }>`
+          select card, from_phone, from_name from share_links where code = ${code}
+        `;
+        const row = rows[0];
+        if (row?.card?.startsWith("data:image")) return row.card;
+        const photo = await findPhoto(sql, row?.from_phone ?? null, row?.from_name ?? null);
+        if (photo?.startsWith("data:image")) return photo;
+      } catch {
+        /* ignore */
+      }
+    }
+
+    // 2. Lookup by name or phone in share_cards (e.g. name:naor yanko)
+    const decoded = decodeURIComponent(rawTrimmed).trim().toLowerCase();
     try {
       const stored = await sql<{ body: string }>`
-        select body from share_cards where code = ${code} limit 1
+        select body from share_cards
+        where code = ${decoded} or code = ${'name:' + decoded}
+        limit 1
       `;
       if (stored[0]?.body?.startsWith("data:image")) return stored[0].body;
     } catch {
-      /* table missing */
+      /* ignore */
     }
+
+    // 3. Lookup recent card by from_name in share_links
     try {
-      const rows = await sql<{ card: string | null; from_phone: string | null; from_name: string }>`
-        select card, from_phone, from_name from share_links where code = ${code}
+      const rows = await sql<{ card: string | null }>`
+        select card from share_links
+        where lower(from_name) = ${decoded} and card is not null
+        order by created_at desc
+        limit 1
       `;
-      const row = rows[0];
-      if (row?.card?.startsWith("data:image")) return row.card;
-      const photo = await findPhoto(sql, row?.from_phone ?? null, row?.from_name ?? null);
-      return photo;
+      if (rows[0]?.card?.startsWith("data:image")) return rows[0].card;
     } catch {
-      return null;
+      /* ignore */
     }
+
+    // 4. Fallback directly to user's photo from phone_book
+    try {
+      const photo = await findPhoto(sql, decoded, decoded);
+      if (photo?.startsWith("data:image")) return photo;
+    } catch {
+      /* ignore */
+    }
+
+    return null;
   });
 
 function bookPerson(

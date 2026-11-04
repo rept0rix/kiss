@@ -32,13 +32,16 @@ export const Route = createFileRoute("/k/$from")({
     };
   },
   head: ({ loaderData }) => {
-    const image = loaderData?.code ? `/c/${loaderData.code}` : "/og.jpg";
+    const origin = "https://app.sendkiss.online";
+    const imageCode = loaderData?.code || encodeURIComponent(loaderData?.fromName || "kiss");
+    const image = `${origin}/c/${imageCode}`;
+    const who = loaderData?.fromName || "me";
     return {
       meta: [
-        { title: "Come get a kiss from me" },
+        { title: `Come get a kiss from ${who}` },
         { name: "description", content: "I left one waiting for you." },
         { property: "og:type", content: "website" },
-        { property: "og:title", content: "Come get a kiss from me" },
+        { property: "og:title", content: `Come get a kiss from ${who}` },
         { property: "og:description", content: "Open it." },
         { property: "og:image", content: image },
         { property: "og:image:secure_url", content: image },

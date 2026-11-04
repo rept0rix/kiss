@@ -98,6 +98,11 @@ export default async function grokPwaMiddleware(
 
   if (!isDocumentPath(path)) return next();
 
+  // If this is an invite/catch page (/k/*) or image card (/c/*), preserve custom og:image tags!
+  if (path.startsWith("/k/") || path.startsWith("/c/")) {
+    return next();
+  }
+
   const result = await next();
   if (
     result instanceof Response &&

@@ -220,7 +220,7 @@ export function SendSheet({
     return () => {
       gone = true;
     };
-  }, [open, tel, myName, myPhone, myPhoto, query]);
+  }, [open, myName, myPhone, myPhoto]);
 
   if (!open) return null;
 
@@ -292,27 +292,42 @@ export function SendSheet({
       .finally(() => setBusy(false));
   }
 
+  async function ensureInviteUrl(targetPhone?: string): Promise<string> {
+    if (inviteUrl) return inviteUrl;
+    try {
+      const card = await buildKissCard(myPhoto ?? null, myName);
+      const { code } = await createShareLink({
+        data: { fromName: myName, toPhone: targetPhone || tel, fromPhone: myPhone, card },
+      });
+      const url = shortCatchUrl(code) ?? `${publicOrigin()}/k/${code}`;
+      setInviteUrl(url);
+      return url;
+    } catch {
+      return publicCatchUrl(myName, targetPhone || tel) || publicOrigin();
+    }
+  }
+
   function getEffectiveUrl() {
     return inviteUrl || publicCatchUrl(myName, tel) || publicOrigin();
   }
 
-  function handleWhatsApp(customPhone?: string) {
+  async function handleWhatsApp(customPhone?: string) {
     const destination = customPhone || tel;
     markInvited();
-    const url = getEffectiveUrl();
+    const url = await ensureInviteUrl(destination);
     openWhatsApp(destination, `Come get a kiss from me on KISS 💋\n${url}`);
   }
 
-  function handleSms(customPhone?: string) {
+  async function handleSms(customPhone?: string) {
     const destination = customPhone || tel;
     markInvited();
-    const url = getEffectiveUrl();
+    const url = await ensureInviteUrl(destination);
     window.location.href = smsHref(destination, `Come get a kiss from me on KISS 💋\n${url}`);
   }
 
   async function handleShare() {
     markInvited();
-    const url = getEffectiveUrl();
+    const url = await ensureInviteUrl();
     const result = await nativeShareOrCopy({
       title: "KISS",
       text: "Come get a kiss from me 💋",
