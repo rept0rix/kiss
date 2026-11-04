@@ -322,7 +322,7 @@ export async function fetchAllPhoneContacts(): Promise<PhoneContact[]> {
   const plugin = await getKissContactsPlugin();
   if (plugin?.getContacts) {
     try {
-      const res = await withTimeout(plugin.getContacts(), 8000, null);
+      const res = await withTimeout(plugin.getContacts(), 4000, null);
       if (res?.contacts && res.contacts.length > 0) {
         const out: PhoneContact[] = [];
         const phones: string[] = [];
@@ -348,7 +348,7 @@ export async function fetchAllPhoneContacts(): Promise<PhoneContact[]> {
   }
 
   // 2. Try Capgo get contacts
-  const capgo = await withTimeout(capgoGetAll(), 8000, null);
+  const capgo = await withTimeout(capgoGetAll(), 4000, null);
   if (capgo !== null && capgo.length > 0) {
     saveCachedContacts(capgo);
     markPhonesAsKnown(capgo.map((c) => c.tel));

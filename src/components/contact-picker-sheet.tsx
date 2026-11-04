@@ -278,7 +278,9 @@ export function ContactPickerSheet({
       for (const d of directoryResults) {
         const tail = d.tel.replace(/\D/g, "").slice(-8);
         if (tail && !existingTails.has(tail)) {
-          directHits.push(d);
+          if (activeTab !== "invite") {
+            directHits.push(d);
+          }
         }
       }
     }
@@ -490,25 +492,34 @@ export function ContactPickerSheet({
             </div>
 
             {/* Contacts List */}
-            {loading && contacts.length === 0 ? (
+            {loading && contacts.length === 0 && !query.trim() ? (
               <div className="flex-1 flex flex-col items-center justify-center py-12 text-neutral-400">
                 <div className="animate-spin rounded-full h-8 w-8 border-2 border-rose-500 border-t-transparent mb-3" />
                 <p className="text-xs">Loading contacts…</p>
               </div>
+            ) : searchingDirectory && filtered.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center py-12 text-neutral-400">
+                <div className="animate-spin rounded-full h-8 w-8 border-2 border-rose-500 border-t-transparent mb-3" />
+                <p className="text-xs">Searching for "{query}"…</p>
+              </div>
             ) : filtered.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center py-10 text-center text-neutral-400">
-                <p className="text-sm font-medium text-white mb-1">No contacts found</p>
-                <p className="text-xs text-neutral-500 mb-4">
-                  {query ? "Try a different name or number" : "No contacts available in this view"}
+              <div className="flex-1 flex flex-col items-center justify-center py-8 px-4 text-center text-neutral-400">
+                <p className="text-sm font-medium text-white mb-1">
+                  {query ? `No contacts found for "${query}"` : "No contacts available in this view"}
+                </p>
+                <p className="text-xs text-neutral-500 mb-4 max-w-xs leading-relaxed">
+                  {isNative
+                    ? "Tap below to pick directly from your iPhone contacts book, or try another search."
+                    : "Try a different name or number, or upload your contacts."}
                 </p>
                 {isNative ? (
                   <Button
                     size="sm"
-                    variant="secondary"
-                    className="border-white/15 text-xs"
+                    className="bg-rose-500 hover:bg-rose-600 text-white text-xs flex items-center justify-center gap-1.5 shadow-md shadow-rose-500/20"
                     onClick={() => void handleNativeSystemPick()}
                   >
-                    Try System Picker
+                    <Smartphone size={14} />
+                    <span>Pick from iPhone Contacts</span>
                   </Button>
                 ) : (
                   <Button
@@ -527,7 +538,10 @@ export function ContactPickerSheet({
                 {filtered.map((c, i) => {
                   const tail = c.tel.replace(/\D/g, "").slice(-8);
                   const appMatch = appMatches.get(tail);
-                  const isRegistered = Boolean(appMatch?.isOnSendKiss);
+                  const isFromDir = directoryResults.some((d) => d.tel.replace(/\D/g, "").slice(-8) === tail);
+                  const isRegistered = Boolean(appMatch?.isOnSendKiss || isFromDir);
+                  const dirContact = isFromDir ? directoryResults.find((d) => d.tel.replace(/\D/g, "").slice(-8) === tail) : null;
+                  const displayPhoto = c.photo || appMatch?.photo || dirContact?.photo || null;
                   const hue = nameHue(c.name);
                   const initial = (c.name.trim()[0] || "?").toUpperCase();
                   const formatted = formatPhone(c.tel).display;
@@ -548,9 +562,9 @@ export function ContactPickerSheet({
                         className="flex-1 min-w-0 flex items-center gap-3 text-left"
                       >
                         {/* Avatar */}
-                        {c.photo || appMatch?.photo ? (
+                        {displayPhoto ? (
                           <img
-                            src={c.photo || appMatch?.photo || ""}
+                            src={displayPhoto}
                             alt=""
                             className="size-10 rounded-full object-cover shrink-0 border border-white/10"
                           />
