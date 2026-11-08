@@ -82,7 +82,7 @@ export async function requestContactsPermission(): Promise<boolean> {
   try {
     const plugin = await getKissContactsPlugin();
     if (plugin?.requestPermissions) {
-      const res = await withTimeout(plugin.requestPermissions(), 6000, null);
+      const res = await withTimeout(plugin.requestPermissions(), 20000, null);
       if (res?.readContacts === "granted" || res?.readContacts === "limited") return true;
       if (res?.readContacts === "denied") return false;
     }
@@ -95,7 +95,7 @@ export async function requestContactsPermission(): Promise<boolean> {
     const { CapacitorContacts } = await import("@capgo/capacitor-contacts");
     const req = await withTimeout(
       CapacitorContacts.requestPermissions({ permissions: ["readContacts"] }),
-      6000,
+      20000,
       null,
     );
     if (req?.readContacts === "granted" || req?.readContacts === "limited") return true;
@@ -107,7 +107,7 @@ export async function requestContactsPermission(): Promise<boolean> {
   try {
     const plugin = await getKissContactsPlugin();
     if (plugin?.getContacts) {
-      const res = await withTimeout(plugin.getContacts(), 6000, null);
+      const res = await withTimeout(plugin.getContacts(), 20000, null);
       return Boolean(res?.contacts && res.contacts.length >= 0);
     }
   } catch {
@@ -322,7 +322,7 @@ export async function fetchAllPhoneContacts(): Promise<PhoneContact[]> {
   const plugin = await getKissContactsPlugin();
   if (plugin?.getContacts) {
     try {
-      const res = await withTimeout(plugin.getContacts(), 4000, null);
+      const res = await withTimeout(plugin.getContacts(), 15000, null);
       if (res?.contacts && res.contacts.length > 0) {
         const out: PhoneContact[] = [];
         const phones: string[] = [];
@@ -348,7 +348,7 @@ export async function fetchAllPhoneContacts(): Promise<PhoneContact[]> {
   }
 
   // 2. Try Capgo get contacts
-  const capgo = await withTimeout(capgoGetAll(), 4000, null);
+  const capgo = await withTimeout(capgoGetAll(), 15000, null);
   if (capgo !== null && capgo.length > 0) {
     saveCachedContacts(capgo);
     markPhonesAsKnown(capgo.map((c) => c.tel));

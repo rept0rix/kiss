@@ -19,19 +19,21 @@ public class KissContactsPlugin: CAPPlugin, CAPBridgedPlugin, CNContactPickerDel
 
     // Helper: Safely resolve top-most presented view controller
     private func getTopViewController() -> UIViewController? {
-        let scenes = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .filter { $0.activationState == .foregroundActive || $0.activationState == .foregroundInactive }
-        let keyWindow = scenes.flatMap { $0.windows }.first(where: { $0.isKeyWindow })
-            ?? UIApplication.shared.windows.first(where: { $0.isKeyWindow })
-            ?? UIApplication.shared.windows.first
-        guard var top = keyWindow?.rootViewController ?? self.bridge?.viewController else {
-            return nil
+        var top: UIViewController? = self.bridge?.viewController
+        if top == nil {
+            let scenes = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .filter { $0.activationState == .foregroundActive || $0.activationState == .foregroundInactive }
+            let keyWindow = scenes.flatMap { $0.windows }.first(where: { $0.isKeyWindow })
+                ?? UIApplication.shared.windows.first(where: { $0.isKeyWindow })
+                ?? UIApplication.shared.windows.first
+            top = keyWindow?.rootViewController
         }
-        while let presented = top.presentedViewController, !presented.isBeingDismissed {
-            top = presented
+        guard var current = top else { return nil }
+        while let presented = current.presentedViewController, !presented.isBeingDismissed {
+            current = presented
         }
-        return top
+        return current
     }
 
     // Helper: Safely build contact full name without Objective-C exceptions
@@ -58,8 +60,6 @@ public class KissContactsPlugin: CAPPlugin, CAPBridgedPlugin, CNContactPickerDel
             picker.delegate = self
             picker.displayedPropertyKeys = [CNContactPhoneNumbersKey]
             picker.predicateForEnablingContact = NSPredicate(format: "phoneNumbers.@count > 0")
-            // If contact has 1 phone number, select contact immediately. If multiple, let user pick the number.
-            picker.predicateForSelectionOfContact = NSPredicate(format: "phoneNumbers.@count == 1")
             topVC.present(picker, animated: true, completion: nil)
         }
     }

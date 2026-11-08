@@ -104,4 +104,21 @@ if (existsSync(manifest)) {
   }
 }
 
+// 3. Ensure KissContactsPlugin in iOS capacitor.config.json
+const capConfigJsonPath = join(root, "ios", "App", "App", "capacitor.config.json");
+if (existsSync(capConfigJsonPath)) {
+  try {
+    const raw = readFileSync(capConfigJsonPath, "utf8");
+    const json = JSON.parse(raw);
+    json.packageClassList = json.packageClassList || [];
+    if (!json.packageClassList.includes("KissContactsPlugin")) {
+      json.packageClassList.push("KissContactsPlugin");
+      writeFileSync(capConfigJsonPath, JSON.stringify(json, null, "\t") + "\n");
+      console.log("[native-setup] Ensured KissContactsPlugin in ios/App/App/capacitor.config.json");
+    }
+  } catch (err) {
+    console.warn("[native-setup] Error checking capacitor.config.json:", err);
+  }
+}
+
 console.log("\n[native-setup] Setup completed successfully!\n");

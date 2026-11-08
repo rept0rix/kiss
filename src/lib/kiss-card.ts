@@ -70,12 +70,36 @@ export function buildKissCard(photo: string | null, name: string): Promise<strin
       finish();
     };
     img.src = photo;
+    if (img.complete && img.naturalWidth > 0) {
+      paint();
+    }
     window.setTimeout(() => {
       if (img.naturalWidth > 0) return;
       emptyFace(ctx, name);
       finish();
     }, 1800);
   });
+}
+
+export async function syncMyShareCard(
+  photo: string | null,
+  name: string,
+  phone?: string,
+): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  try {
+    const card = await buildKissCard(photo, name);
+    if (card) {
+      const { saveUserShareCard } = await import("./kisses/server");
+      await saveUserShareCard({
+        data: { name, phone, photo, card },
+      });
+    }
+    return card;
+  } catch (err) {
+    console.warn("[syncMyShareCard] Failed:", err);
+    return null;
+  }
 }
 
 function emptyFace(ctx: CanvasRenderingContext2D, name: string) {

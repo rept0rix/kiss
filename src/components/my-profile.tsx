@@ -5,6 +5,7 @@ import { addPhoto, loadGallery, saveGallery, type Gallery } from "@/lib/gallery"
 import { listNicks } from "@/lib/kisses/server";
 import { openWhatsApp } from "@/lib/contacts";
 import { nativeShareOrCopy, publicCatchUrl, publicOrigin } from "@/lib/share";
+import { syncMyShareCard } from "@/lib/kiss-card";
 import { Achievements } from "./achievements";
 import { Face } from "./face";
 import { QrCodeSection } from "./qr-code-section";
@@ -74,6 +75,7 @@ export function MyProfile({
             type="button"
             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-[#25d366]/15 hover:bg-[#25d366]/25 text-[#25d366] font-medium text-xs transition-colors"
             onClick={() => {
+              if (photo) void syncMyShareCard(photo, name, phone);
               const url = publicCatchUrl(name, phone) || publicOrigin();
               openWhatsApp("", `Send me a kiss on KISS 💋\n${url}`);
             }}
@@ -85,6 +87,7 @@ export function MyProfile({
             type="button"
             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/15 text-white font-medium text-xs transition-colors"
             onClick={async () => {
+              if (photo) void syncMyShareCard(photo, name, phone);
               const url = publicCatchUrl(name, phone);
               const res = await nativeShareOrCopy({
                 title: "KISS",

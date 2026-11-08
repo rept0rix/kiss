@@ -1074,6 +1074,81 @@ export const resolveShareLink = createServerFn({ method: "GET" })
     return { fromName: row.from_name, toPhone: row.to_phone, code, fromPhoto };
   });
 
+export const saveUserShareCard = createServerFn({ method: "POST" })
+  .validator((data: { name: string; phone?: string; photo?: string | null; card?: string | null }) => data)
+  .handler(async ({ data }): Promise<{ ok: boolean }> => {
+    const sql = await getSql();
+    const name = data.name.trim();
+    const phone = data.phone ? normalizePhone(data.phone) : "";
+    const rawPhoto = data.photo ?? "";
+    const photo = rawPhoto.startsWith("data:image") ? rawPhoto.slice(0, 150000) : null;
+    const rawCard = data.card ?? "";
+    const card = rawCard.startsWith("data:image") ? rawCard.slice(0, 450000) : null;
+
+    if (phone && phone.length >= MIN_PHONE_DIGITS) {
+      try {
+        await sql`
+          insert into phone_book (phone, display_name, photo, last_seen)
+          values (${phone}, ${name}, ${photo}, now())
+          on conflict (phone) do update set
+            display_name = case when excluded.display_name <> '' then excluded.display_name else phone_book.display_name end,
+            photo = coalesce(excluded.photo, phone_book.photo),
+            last_seen = now()
+        `;
+      } catch (err) {
+        console.warn("[saveUserShareCard] phone_book update error:", err);
+      }
+    }
+
+    if (card) {
+      try {
+        if (name) {
+          const nameKey = name.toLowerCase();
+          await sql`
+            insert into share_cards (code, body)
+            values (${nameKey}, ${card})
+            on conflict (code) do update set body = excluded.body
+          `;
+          await sql`
+            insert into share_cards (code, body)
+            values (${'name:' + nameKey}, ${card})
+            on conflict (code) do update set body = excluded.body
+          `.catch(() => undefined);
+        }
+        if (phone) {
+          await sql`
+            insert into share_cards (code, body)
+            values (${'phone:' + phone}, ${card})
+            on conflict (code) do update set body = excluded.body
+          `.catch(() => undefined);
+        }
+      } catch (err) {
+        console.warn("[saveUserShareCard] share_cards update error:", err);
+      }
+    }
+
+    return { ok: true };
+  });
+
+export const updatePhoneName = createServerFn({ method: "POST" })
+  .validator((data: { phone: string; name: string }) => data)
+  .handler(async ({ data }) => {
+    const displayName = data.name.trim().slice(0, 32);
+    const phone = normalizePhone(data.phone);
+    if (!phone || displayName.length < 2) return { ok: false };
+    const sql = await getSql();
+    try {
+      await sql`
+        update phone_book
+        set display_name = ${displayName}, last_seen = now()
+        where phone_match(phone, ${phone})
+      `;
+      return { ok: true };
+    } catch {
+      return { ok: false };
+    }
+  });
+
 export const getShareCard = createServerFn({ method: "GET" })
   .validator((code: string) => code)
   .handler(async ({ data: raw }): Promise<string | null> => {
@@ -1098,19 +1173,20 @@ export const getShareCard = createServerFn({ method: "GET" })
         `;
         const row = rows[0];
         if (row?.card?.startsWith("data:image")) return row.card;
-        const photo = await findPhoto(sql, row?.from_phone ?? null, row?.from_name ?? null);
-        if (photo?.startsWith("data:image")) return photo;
       } catch {
         /* ignore */
       }
     }
 
-    // 2. Lookup by name or phone in share_cards (e.g. name:naor yanko)
+    // 2. Lookup by name or phone in share_cards (e.g. name:naor yanko or direct name)
     const decoded = decodeURIComponent(rawTrimmed).trim().toLowerCase();
     try {
       const stored = await sql<{ body: string }>`
         select body from share_cards
-        where code = ${decoded} or code = ${'name:' + decoded}
+        where code = ${decoded}
+           or code = ${'name:' + decoded}
+           or code = ${'phone:' + decoded}
+        order by (code = ${'name:' + decoded}) desc
         limit 1
       `;
       if (stored[0]?.body?.startsWith("data:image")) return stored[0].body;
@@ -1131,7 +1207,7 @@ export const getShareCard = createServerFn({ method: "GET" })
       /* ignore */
     }
 
-    // 4. Fallback directly to user's photo from phone_book
+    // 4. Fallback to user photo from phone_book
     try {
       const photo = await findPhoto(sql, decoded, decoded);
       if (photo?.startsWith("data:image")) return photo;
@@ -1302,11 +1378,11 @@ export const batchCheckContacts = createServerFn({ method: "POST" })
     let knownRows: Array<{ phone: string; display_name: string; photo: string | null }> = [];
     try {
       knownRows = await sql<{ phone: string; display_name: string; photo: string | null }>`
-        select pb.phone, pb.display_name, coalesce(pb.photo, pp.photo) as photo
-        from phone_book pb
-        left join phone_photos pp on pp.phone = pb.phone
+        select phone, display_name, photo
+        from phone_book
       `;
-    } catch {
+    } catch (err) {
+      console.warn("[batchCheckContacts] query error:", err);
       knownRows = [];
     }
 
@@ -1318,7 +1394,7 @@ export const batchCheckContacts = createServerFn({ method: "POST" })
       }
       const match = knownRows.find((kr) => {
         const krTail = kr.phone.replace(/\D/g, "").slice(-8);
-        return krTail && krTail === cp.tail;
+        return krTail && (krTail === cp.tail || kr.phone === cp.clean);
       });
       if (match) {
         return {

@@ -115,11 +115,6 @@ export function ContactPickerSheet({
     setLoading(true);
     setError(null);
 
-    // Safety timeout: loading should never be stuck for more than 3 seconds
-    const safetyTimer = setTimeout(() => {
-      setLoading(false);
-    }, 3000);
-
     // 1. Immediately populate from local cache and recent contacts so user never sees a dead blank screen
     const cached = loadCachedContacts();
     const recents = loadRecents();
@@ -145,7 +140,6 @@ export function ContactPickerSheet({
     } catch (err) {
       console.warn("Init contacts error:", err);
     } finally {
-      clearTimeout(safetyTimer);
       setLoading(false);
     }
   }
@@ -385,7 +379,7 @@ export function ContactPickerSheet({
         </div>
 
         {/* Permission Prompt screen ONLY when permission is undetermined ("prompt") and no search */}
-        {permission === "prompt" && contacts.length === 0 && !query.trim() && directoryResults.length === 0 ? (
+        {permission === "prompt" && contacts.length === 0 && !query.trim() ? (
           <div className="my-auto py-6 px-3 flex flex-col items-center text-center">
             <div className="w-16 h-16 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-500 mb-4 shadow-[0_0_20px_rgba(255,45,85,0.25)]">
               <Users size={32} />

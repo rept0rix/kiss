@@ -20,8 +20,9 @@ import { LipsMark } from "@/components/lips-mark";
 import { invalidateHome, invalidatePhoneInbox, useHome, usePhoneHome, usePhoneInbox, usePhoneStats } from "@/hooks/use-home";
 import { useKeyboardInset } from "@/hooks/use-keyboard";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { blockPhone, catchKiss, catchPhoneKiss, listIncomingPhoneRequests, lookupFace, pingPresence, registerPhone, searchDirectory, sendKiss, sendPhoneKiss, setDisplayName, setPhone, unblockPhone } from "@/lib/kisses/server";
+import { blockPhone, catchKiss, catchPhoneKiss, listIncomingPhoneRequests, lookupFace, pingPresence, registerPhone, searchDirectory, sendKiss, sendPhoneKiss, setDisplayName, setPhone, unblockPhone, updatePhoneName } from "@/lib/kisses/server";
 import { nativeShareOrCopy, publicCatchUrl, publicOrigin } from "@/lib/share";
+import { syncMyShareCard } from "@/lib/kiss-card";
 import { isLive } from "@/lib/kisses/online";
 import { nextRank, rankAt } from "@/lib/kisses/ranks";
 import type { HomePayload, OrbitItem } from "@/lib/kisses/types";
@@ -726,7 +727,9 @@ function Home() {
           value={displayName}
           onChange={(name) => {
             patch({ name });
+            if (me.phone) void updatePhoneName({ data: { phone: me.phone, name } }).catch(() => undefined);
             if (liveUser) void setDisplayName({ data: name });
+            if (me.photo) void syncMyShareCard(me.photo, name, me.phone);
           }}
         />
         <button
@@ -877,10 +880,12 @@ function Home() {
           void cropPhoto(file).then(async (data) => {
             rememberPhoto(data);
             const g = addPhoto(data);
-            patch({ photo: g.main || data });
+            const main = g.main || data;
+            patch({ photo: main });
+            const thumb = await shrinkDataUrl(main, 160);
+            void syncMyShareCard(main, displayName, me.phone);
             if (me.phone) {
-              const photo = await shrinkDataUrl(data, 160);
-              void registerPhone({ data: { phone: me.phone, name: me.name, photo } }).catch(() => undefined);
+              void registerPhone({ data: { phone: me.phone, name: me.name, photo: thumb } }).catch(() => undefined);
             }
           });
         }}
@@ -898,9 +903,10 @@ function Home() {
             const g = loadGallery();
             saveGallery({ ...g, main: p });
             patch({ photo: p });
+            const thumb = await shrinkDataUrl(p, 160);
+            void syncMyShareCard(p, displayName, me.phone);
             if (me.phone) {
-              const photo = await shrinkDataUrl(p, 160);
-              void registerPhone({ data: { phone: me.phone, name: me.name, photo } }).catch(() => undefined);
+              void registerPhone({ data: { phone: me.phone, name: me.name, photo: thumb } }).catch(() => undefined);
             }
           }}
           onSend={(p) => {
@@ -932,6 +938,9 @@ function Home() {
         onSettings={() => setSettings(true)}
         onShare={async () => {
           setMoreOpen(false);
+          if (me.photo) {
+            void syncMyShareCard(me.photo, displayName, me.phone);
+          }
           const url = publicCatchUrl(displayName, me.phone);
           const res = await nativeShareOrCopy({
             title: "KISS",
@@ -951,6 +960,17 @@ function Home() {
             setGate(false);
             setFinding(true);
             patch({ entered: true, phone });
+            // Always register on backend so user and photo are persisted to Neon
+            void registerPhone({
+              data: {
+                phone,
+                name: me.name,
+                photo: me.photo ? me.photo.slice(0, 120000) : null,
+              },
+            }).catch(() => undefined);
+            if (me.photo) {
+              void syncMyShareCard(me.photo, me.name || "Someone", phone);
+            }
             void lookupFace({ data: { phone } })
               .then((hit) => {
                 setMe((prev) => {
@@ -974,9 +994,6 @@ function Home() {
                 });
               })
               .finally(() => setFinding(false));
-            if (liveUser) {
-              void registerPhone({ data: { phone } }).catch(() => undefined);
-            }
           }}
         />
       ) : null}

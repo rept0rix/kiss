@@ -34,7 +34,8 @@ export const Route = createFileRoute("/k/$from")({
   head: ({ loaderData }) => {
     const origin = "https://app.sendkiss.online";
     const imageCode = loaderData?.code || encodeURIComponent(loaderData?.fromName || "kiss");
-    const image = `${origin}/c/${imageCode}`;
+    const v = loaderData?.fromPhoto ? loaderData.fromPhoto.slice(-12).replace(/[^a-zA-Z0-9]/g, "") : "kiss";
+    const image = `${origin}/c/${imageCode}?v=${v}`;
     const who = loaderData?.fromName || "me";
     return {
       meta: [
